@@ -14,6 +14,7 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
   const [componentMountTime] = useState(Date.now()); // เวลาที่ component mount
   const minimumLoadingTime = 4000; // อย่างน้อย 4 วินาที (4000ms)
   const hasCalledFallbackRef = useRef(false); // ป้องกันการเรียก fallback API ซ้ำ
+  const lastDateInfoKeyRef = useRef(null); // เก็บ dateInfo key ล่าสุดที่เรียก API
 
   // สุ่มเลือก mockup wallpaper สำหรับแสดงตอน loading
   const selectedMockupWallpaper = useMemo(() => {
@@ -37,59 +38,76 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
 
   // รับภาพจาก prop (ที่สร้างไว้แล้วใน LoadingScreen) หรือเรียก API fallback
   useEffect(() => {
+    // สร้าง unique key จาก dateInfo เพื่อตรวจสอบ
+    const dateInfoKey = dateInfo ? JSON.stringify(dateInfo) : null;
+
     if (propGeneratedImage) {
       console.log("✅ Received pre-generated image");
       setGeneratedImage(propGeneratedImage);
       setImageReadyTime(Date.now());
-      hasCalledFallbackRef.current = false; // Reset เมื่อได้รับภาพใหม่
-    } else if (!generatedImage && !error && dateInfo && !hasCalledFallbackRef.current) {
-      // ถ้ายังไม่มีภาพ ให้เรียก API สร้างภาพ (fallback) - เรียกแค่ครั้งเดียว
-      hasCalledFallbackRef.current = true; // ตั้ง flag ก่อนเรียก API
-      console.log("🎨 Starting wallpaper generation (fallback) with dateInfo:", dateInfo);
+      // Reset flags เมื่อได้รับภาพใหม่ (อาจเป็น dateInfo ใหม่)
+      if (lastDateInfoKeyRef.current !== dateInfoKey) {
+        hasCalledFallbackRef.current = false;
+        lastDateInfoKeyRef.current = dateInfoKey;
+      }
+    } else if (!generatedImage && !error && dateInfo) {
+      // ตรวจสอบว่า dateInfo เปลี่ยนหรือไม่ (ถ้าเปลี่ยน ให้ reset flags)
+      if (lastDateInfoKeyRef.current !== dateInfoKey) {
+        hasCalledFallbackRef.current = false;
+        lastDateInfoKeyRef.current = dateInfoKey;
+      }
 
-      let isCancelled = false;
+      // ถ้ายังไม่มีภาพ และยังไม่เคยเรียก API สำหรับ dateInfo นี้ ให้เรียก API สร้างภาพ (fallback)
+      if (!hasCalledFallbackRef.current) {
+        hasCalledFallbackRef.current = true; // ตั้ง flag ก่อนเรียก API
+        console.log("🎨 Starting wallpaper generation (fallback) with dateInfo:", dateInfo);
 
-      const generateImage = async () => {
-        try {
-          const result = await generateWallpaperImage(dateInfo);
+        let isCancelled = false;
 
-          // ตรวจสอบว่า component ยัง mount อยู่หรือไม่
-          if (isCancelled) {
-            console.log("⚠️ Component unmounted, skipping fallback image result");
-            return;
+        const generateImage = async () => {
+          try {
+            const result = await generateWallpaperImage(dateInfo);
+
+            // ตรวจสอบว่า component ยัง mount อยู่หรือไม่ และ dateInfo ยังเหมือนเดิมหรือไม่
+            if (isCancelled || lastDateInfoKeyRef.current !== dateInfoKey) {
+              console.log("⚠️ Component unmounted or dateInfo changed, skipping fallback image result");
+              return;
+            }
+
+            if (result.success && result.base64) {
+              console.log("✅ Image generated successfully (fallback)");
+              setGeneratedImage(result.base64);
+              setImageReadyTime(Date.now());
+            } else {
+              console.error("❌ Image generation failed:", result.error);
+              if (!isCancelled && lastDateInfoKeyRef.current === dateInfoKey) {
+                setError(result.error || "เกิดข้อผิดพลาดในการสร้างภาพ");
+                setIsLoading(false);
+              }
+            }
+          } catch (error) {
+            console.error("❌ Error in generateImage:", error);
+            if (!isCancelled && lastDateInfoKeyRef.current === dateInfoKey) {
+              setError(error.message || "เกิดข้อผิดพลาดในการสร้างภาพ");
+              setIsLoading(false);
+            }
           }
+        };
 
-          if (result.success && result.base64) {
-            console.log("✅ Image generated successfully (fallback)");
-            setGeneratedImage(result.base64);
-            setImageReadyTime(Date.now());
-          } else {
-            console.error("❌ Image generation failed:", result.error);
-            setError(result.error || "เกิดข้อผิดพลาดในการสร้างภาพ");
-            setIsLoading(false);
-          }
-        } catch (error) {
-          console.error("❌ Error in generateImage:", error);
-          if (!isCancelled) {
-            setError(error.message || "เกิดข้อผิดพลาดในการสร้างภาพ");
-            setIsLoading(false);
-          }
-        }
-      };
+        generateImage();
 
-      generateImage();
-
-      // Cleanup function
-      return () => {
-        isCancelled = true;
-        console.log("🧹 Cleanup: ยกเลิกการเรียก fallback API สร้างภาพ");
-      };
+        // Cleanup function
+        return () => {
+          isCancelled = true;
+          console.log("🧹 Cleanup: ยกเลิกการเรียก fallback API สร้างภาพ");
+        };
+      }
     } else if (!dateInfo) {
       console.error("❌ dateInfo is missing");
       setError("ข้อมูลวันเกิดไม่ครบถ้วน");
       setIsLoading(false);
     }
-  }, [propGeneratedImage, dateInfo, generatedImage, error]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [propGeneratedImage, dateInfo]); // ลบ generatedImage และ error ออกจาก dependency เพื่อป้องกันการ trigger ซ้ำ
 
   // จัดการ loading state โดยคำนึงถึง minimum loading time (นับจาก component mount)
   useEffect(() => {

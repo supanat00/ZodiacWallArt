@@ -24,16 +24,28 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
   const isFortuneCallingRef = useRef(false); // Flag ว่า "กำลังเรียก API ทำนายดวงอยู่"
   const isImageCallingRef = useRef(false); // Flag ว่า "กำลังเรียก API สร้างภาพอยู่"
 
-  // Reset state เมื่อ component mount
+  // Reset state เมื่อ component mount หรือเมื่อ dateInfo เปลี่ยน (เริ่มใหม่)
   useEffect(() => {
+    // Reset state แต่ไม่ reset refs เพื่อป้องกันการเรียก API ซ้ำ
     setShowResult(false);
     setFadeOut(false);
     setDisplayedText('');
     setPredictionText('');
     setIsLoading(true);
     setCanvasKey(prev => prev + 1); // Force re-mount Canvas
-    // ไม่ reset refs ที่นี่ เพราะเราต้องการป้องกันการเรียกซ้ำแม้ใน StrictMode
-  }, []);
+
+    // Reset calling flags เมื่อ dateInfo เปลี่ยน (เริ่มใหม่)
+    if (dateInfo) {
+      const dateInfoKey = JSON.stringify(dateInfo);
+      // ถ้า dateInfo เปลี่ยน ให้ reset flags
+      if (calledDateInfoRef.current !== dateInfoKey) {
+        isFortuneCallingRef.current = false;
+      }
+      if (calledImageDateInfoRef.current !== dateInfoKey) {
+        isImageCallingRef.current = false;
+      }
+    }
+  }, [dateInfo]); // เพิ่ม dateInfo เป็น dependency เพื่อ reset เมื่อ dateInfo เปลี่ยน
 
   // เรียก API ทำนายดวงเมื่อ component mount และมี dateInfo (เรียกแค่ครั้งเดียว)
   useEffect(() => {

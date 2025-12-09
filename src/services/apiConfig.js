@@ -24,7 +24,7 @@ export const API_CONFIG = {
     apiKey: OPENAI_API_KEY,
     model: import.meta.env.VITE_IMAGE_MODEL || "dall-e-3",
     defaultSize: "1024x1792", // 9:16 ratio
-    defaultQuality: "hd",
+    defaultQuality: "standard",
     defaultStyle: "natural",
   },
 

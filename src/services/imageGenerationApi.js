@@ -103,92 +103,140 @@ const convertUrlToBase64 = async (imageUrl) => {
   }
 };
 
+// Global flag เพื่อป้องกันการเรียก API ซ้ำ (ใช้ร่วมกันทั้ง app)
+const imageGenerationInProgress = new Map(); // เก็บ dateInfo key ที่กำลังเรียก API อยู่
+
 /**
  * เรียก API สร้างภาพวอลเปเปอร์
  * @param {Object} dateInfo - ข้อมูลวันเกิด { day, month, year, dayOfWeek, zodiac, chineseZodiac }
  * @returns {Promise<Object>} - { success, imageUrl, base64, revisedPrompt, error }
  */
 export const generateWallpaperImage = async (dateInfo) => {
-  try {
-    console.log("🎨 Starting image generation with dateInfo:", dateInfo);
+  // สร้าง unique key จาก dateInfo
+  const dateInfoKey = JSON.stringify(dateInfo);
 
-    // ตรวจสอบ API key
-    const apiKey = API_CONFIG.imageGeneration.apiKey;
-    if (!apiKey) {
-      throw new Error(
-        "OpenAI API key is not configured. Please set VITE_OPENAI_API_KEY in .env file."
-      );
+  // ตรวจสอบว่ามีการเรียก API สำหรับ dateInfo นี้อยู่แล้วหรือไม่
+  if (imageGenerationInProgress.has(dateInfoKey)) {
+    console.warn(
+      "⚠️ Image generation API is already in progress for this dateInfo, reusing existing promise"
+    );
+    // รอให้ request เดิมเสร็จและ return result เดิม
+    try {
+      return await imageGenerationInProgress.get(dateInfoKey);
+    } catch (error) {
+      // ถ้า Promise เดิม error ก็ return error
+      return {
+        success: false,
+        error: error.message || "Unknown error occurred",
+        imageUrl: null,
+        base64: null,
+        revisedPrompt: null,
+      };
     }
+  }
 
-    // สร้าง prompt
-    const prompt = generateImagePrompt(dateInfo);
-    console.log("📝 Generated prompt:", prompt);
+  console.log("🎨 Starting image generation with dateInfo:", dateInfo);
 
-    // สร้าง OpenAI client
-    const openai = getOpenAIClient();
-
-    // เรียก API สร้างภาพ (ใช้ b64_json เพื่อหลีกเลี่ยง CORS)
-    console.log("🔄 Calling OpenAI API...");
-    const result = await openai.images.generate({
-      model: API_CONFIG.imageGeneration.model,
-      prompt: prompt,
-      size: "1024x1792", // ขนาดภาพแนวดิ่ง 9:16 สำหรับวอลเปเปอร์ (hardcoded เพื่อความแน่ใจ)
-      quality: API_CONFIG.imageGeneration.defaultQuality,
-      style: API_CONFIG.imageGeneration.defaultStyle,
-      response_format: "b64_json", // ใช้ b64_json เพื่อหลีกเลี่ยง CORS error
-      n: 1,
-    });
-
-    console.log("✅ Image generation response:", result);
-
-    if (!result.data || !result.data[0]) {
-      throw new Error("Invalid response from OpenAI API: missing image data");
-    }
-
-    const imageData = result.data[0];
-    const revisedPrompt = imageData.revised_prompt || null;
-
-    // ใช้ base64 จาก response โดยตรง (ไม่ต้อง fetch URL)
-    let base64 = null;
-    if (imageData.b64_json) {
-      // ถ้ามี b64_json ให้ใช้โดยตรง
-      base64 = `data:image/png;base64,${imageData.b64_json}`;
-      console.log("✅ Using base64 from response");
-    } else if (imageData.url) {
-      // Fallback: ถ้ามี URL ให้ลอง fetch (อาจมี CORS error)
-      console.log(
-        "⚠️ No b64_json, trying to fetch URL (may have CORS issues)..."
-      );
-      try {
-        base64 = await convertUrlToBase64(imageData.url);
-        console.log("✅ Base64 conversion from URL complete");
-      } catch (error) {
-        console.error("❌ Failed to convert URL to base64:", error);
-        throw new Error(
-          "Failed to fetch image: CORS error. Please use b64_json format."
-        );
-      }
-    } else {
-      throw new Error(
-        "Invalid response from OpenAI API: missing image data (no b64_json or url)"
-      );
-    }
-
-    return {
-      success: true,
-      imageUrl: imageData.url || null, // อาจเป็น null ถ้าใช้ b64_json
-      base64: base64,
-      revisedPrompt: revisedPrompt,
-    };
-  } catch (error) {
-    console.error("❌ Error calling image generation API:", error);
-    return {
+  // ตรวจสอบ API key
+  const apiKey = API_CONFIG.imageGeneration.apiKey;
+  if (!apiKey) {
+    const error = {
       success: false,
-      error: error.message || "Unknown error occurred",
+      error:
+        "OpenAI API key is not configured. Please set VITE_OPENAI_API_KEY in .env file.",
       imageUrl: null,
       base64: null,
       revisedPrompt: null,
     };
+    return error;
+  }
+
+  // สร้าง prompt
+  const prompt = generateImagePrompt(dateInfo);
+  console.log("📝 Generated prompt:", prompt);
+
+  // สร้าง Promise และเก็บไว้ใน Map เพื่อป้องกันการเรียกซ้ำ
+  const apiPromise = (async () => {
+    try {
+      // สร้าง OpenAI client
+      const openai = getOpenAIClient();
+
+      // เรียก API สร้างภาพ (ใช้ b64_json เพื่อหลีกเลี่ยง CORS)
+      console.log("🔄 Calling OpenAI API...");
+      const result = await openai.images.generate({
+        model: API_CONFIG.imageGeneration.model,
+        prompt: prompt,
+        size: "1024x1792", // ขนาดภาพแนวดิ่ง 9:16 สำหรับวอลเปเปอร์ (hardcoded เพื่อความแน่ใจ)
+        quality: API_CONFIG.imageGeneration.defaultQuality,
+        style: API_CONFIG.imageGeneration.defaultStyle,
+        response_format: "b64_json", // ใช้ b64_json เพื่อหลีกเลี่ยง CORS error
+        n: 1,
+      });
+
+      console.log("✅ Image generation response:", result);
+
+      if (!result.data || !result.data[0]) {
+        throw new Error("Invalid response from OpenAI API: missing image data");
+      }
+
+      const imageData = result.data[0];
+      const revisedPrompt = imageData.revised_prompt || null;
+
+      // ใช้ base64 จาก response โดยตรง (ไม่ต้อง fetch URL)
+      let base64 = null;
+      if (imageData.b64_json) {
+        // ถ้ามี b64_json ให้ใช้โดยตรง
+        base64 = `data:image/png;base64,${imageData.b64_json}`;
+        console.log("✅ Using base64 from response");
+      } else if (imageData.url) {
+        // Fallback: ถ้ามี URL ให้ลอง fetch (อาจมี CORS error)
+        console.log(
+          "⚠️ No b64_json, trying to fetch URL (may have CORS issues)..."
+        );
+        try {
+          base64 = await convertUrlToBase64(imageData.url);
+          console.log("✅ Base64 conversion from URL complete");
+        } catch (error) {
+          console.error("❌ Failed to convert URL to base64:", error);
+          throw new Error(
+            "Failed to fetch image: CORS error. Please use b64_json format."
+          );
+        }
+      } else {
+        throw new Error(
+          "Invalid response from OpenAI API: missing image data (no b64_json or url)"
+        );
+      }
+
+      return {
+        success: true,
+        imageUrl: imageData.url || null, // อาจเป็น null ถ้าใช้ b64_json
+        base64: base64,
+        revisedPrompt: revisedPrompt,
+      };
+    } catch (error) {
+      console.error("❌ Error calling image generation API:", error);
+      return {
+        success: false,
+        error: error.message || "Unknown error occurred",
+        imageUrl: null,
+        base64: null,
+        revisedPrompt: null,
+      };
+    }
+  })();
+
+  // เก็บ Promise ไว้ใน Map
+  imageGenerationInProgress.set(dateInfoKey, apiPromise);
+  console.log("📌 Stored image generation promise in progress map");
+
+  try {
+    const result = await apiPromise;
+    return result;
+  } finally {
+    // ลบ Promise ออกจาก Map เมื่อเสร็จสิ้น (ไม่ว่าจะสำเร็จหรือล้มเหลว)
+    imageGenerationInProgress.delete(dateInfoKey);
+    console.log("🧹 Cleaned up image generation promise for dateInfo");
   }
 };
 
