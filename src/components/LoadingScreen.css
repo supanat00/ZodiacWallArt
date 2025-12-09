@@ -63,18 +63,39 @@
     padding: 0 0.5rem;
   }
 
+  .prediction-result {
+    gap: 1rem;
+    margin-top: -1.5rem; /* ขยับขึ้นสำหรับมือถือ */
+  }
+
   .prediction-card {
-    padding: 1.5rem;
+    padding: 1rem;
+    max-height: 65vh; /* เพิ่มจาก 55vh เป็น 65vh (เพิ่ม 10%) */
+    gap: 0.75rem;
+  }
+
+  .copy-button {
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 32px;
+    height: 32px;
+  }
+
+  .copy-button svg {
+    width: 16px;
+    height: 16px;
   }
 
   .prediction-logo {
-    max-width: 120px;
-    max-height: 100px;
+    max-width: 80px;
+    max-height: 60px;
   }
 
   .prediction-text {
     font-size: 0.9rem;
-    min-height: 150px;
+    min-height: 120px;
+    max-height: calc(65vh - 150px); /* ปรับตาม 65vh */
+    padding: 0.5rem 0.75rem;
   }
 
   .get-wallpaper-button {
@@ -99,20 +120,39 @@
     font-size: 1.2rem;
   }
 
+  .prediction-result {
+    gap: 0.75rem;
+    margin-top: -1.5rem; /* ขยับขึ้นสำหรับหน้าจอเล็ก */
+  }
+
   .prediction-card {
-    padding: 1.25rem;
+    padding: 1rem;
+    max-height: 60vh; /* เพิ่มจาก 50vh เป็น 60vh (เพิ่ม 10%) */
+    gap: 0.75rem;
+  }
+
+  .copy-button {
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 30px;
+    height: 30px;
+  }
+
+  .copy-button svg {
+    width: 14px;
+    height: 14px;
   }
 
   .prediction-logo {
-    max-width: 100px;
-    max-height: 80px;
+    max-width: 70px;
+    max-height: 55px;
   }
 
   .prediction-text {
     font-size: 0.85rem;
-    min-height: 120px;
-    max-height: 300px;
-    padding: 0.75rem 1rem;
+    min-height: 100px;
+    max-height: calc(60vh - 140px); /* ปรับตาม 60vh */
+    padding: 0.5rem 0.75rem;
   }
 
   .get-wallpaper-button {
@@ -137,19 +177,38 @@
     font-size: 1rem;
   }
 
+  .prediction-result {
+    gap: 0.5rem;
+    margin-top: -1rem; /* ขยับขึ้นสำหรับหน้าจอเล็กมาก */
+  }
+
   .prediction-card {
-    padding: 1rem;
+    padding: 0.75rem;
+    max-height: 60vh; /* เพิ่มจาก 50vh เป็น 60vh (เพิ่ม 10%) */
+    gap: 0.5rem;
+  }
+
+  .copy-button {
+    top: 0.375rem;
+    right: 0.375rem;
+    width: 28px;
+    height: 28px;
+  }
+
+  .copy-button svg {
+    width: 13px;
+    height: 13px;
   }
 
   .prediction-logo {
-    max-width: 80px;
-    max-height: 60px;
+    max-width: 60px;
+    max-height: 45px;
   }
 
   .prediction-text {
     font-size: 0.8rem;
-    min-height: 100px;
-    max-height: 250px;
+    min-height: 80px;
+    max-height: calc(60vh - 120px); /* ปรับตาม 60vh */
     padding: 0.5rem 0.75rem;
   }
 
@@ -200,31 +259,74 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2rem;
+  gap: 1.5rem; /* ลด gap เพื่อขยับขึ้น */
   width: 100%;
   max-width: 600px;
   animation: fadeIn 0.5s ease-in;
+  margin-top: -2rem; /* ขยับขึ้น */
 }
 
 .prediction-card {
   background-color: #f5e6d3;
   border: 2px solid #c48f3e;
   border-radius: 12px;
-  padding: 2rem;
+  padding: 1.5rem;
   width: 100%;
+  max-height: 70vh; /* เพิ่มความสูงจาก 60vh เป็น 70vh (เพิ่ม 10%) */
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  overflow: hidden; /* ป้องกันเนื้อหาล้นกรอบ */
+  position: relative; /* สำหรับ positioning copy button */
+}
+
+.copy-button {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid #c48f3e;
+  background-color: #f5e6d3;
+  color: #c48f3e;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 10;
+  padding: 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.copy-button:hover {
+  background-color: #c48f3e;
+  color: #f5e6d3;
+  transform: scale(1.1);
+  box-shadow: 0 4px 8px rgba(196, 143, 62, 0.3);
+}
+
+.copy-button:active {
+  transform: scale(0.95);
+}
+
+.copy-button svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.5;
 }
 
 .prediction-logo {
   width: auto;
   height: auto;
-  max-width: 150px;
-  max-height: 120px;
+  max-width: 120px;
+  max-height: 90px;
   object-fit: contain;
 }
 
@@ -233,8 +335,10 @@
   line-height: 1.8;
   color: #333;
   text-align: left;
-  min-height: 200px;
-  max-height: 400px;
+  min-height: 150px;
+  max-height: calc(
+    70vh - 200px
+  ); /* ปรับตามความสูงของ card (70vh) ลบพื้นที่โลโก้และ padding */
   overflow-y: auto;
   overflow-x: hidden;
   padding: 1rem 1.5rem;
@@ -243,6 +347,7 @@
   white-space: pre-wrap;
   width: 100%;
   box-sizing: border-box;
+  flex: 1; /* ให้ขยายตามพื้นที่ที่เหลือ */
 }
 
 /* จัดรูปแบบ list items (ถ้ามี HTML list) */

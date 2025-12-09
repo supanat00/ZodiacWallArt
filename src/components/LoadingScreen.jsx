@@ -178,6 +178,33 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
     }
   };
 
+  const handleCopyText = async () => {
+    if (!predictionText) return;
+
+    try {
+      await navigator.clipboard.writeText(predictionText);
+      // แสดง feedback (อาจจะเพิ่ม toast หรือ alert ตามต้องการ)
+      alert('คัดลอกข้อความแล้ว');
+    } catch (error) {
+      console.error('❌ Error copying text:', error);
+      // Fallback: ใช้วิธีเก่า
+      const textArea = document.createElement('textarea');
+      textArea.value = predictionText;
+      textArea.style.position = 'fixed';
+      textArea.style.opacity = '0';
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        alert('คัดลอกข้อความแล้ว');
+      } catch (err) {
+        console.error('❌ Fallback copy failed:', err);
+        alert('ไม่สามารถคัดลอกข้อความได้');
+      }
+      document.body.removeChild(textArea);
+    }
+  };
+
   return (
     <div className="loading-screen">
       {!showResult ? (
@@ -209,6 +236,17 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
       ) : (
         <div className="prediction-result">
           <div className="prediction-card">
+            <button
+              className="copy-button"
+              onClick={handleCopyText}
+              title="คัดลอกข้อความ"
+              aria-label="คัดลอกข้อความ"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
             <img src={logo} alt="Logo" className="prediction-logo" />
             <div className="prediction-text">
               {displayedText}

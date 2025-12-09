@@ -56,6 +56,7 @@
   box-sizing: border-box;
   position: relative;
   overflow: hidden;
+  padding: 0; /* ระบุชัดเจนว่าไม่มี padding */
 }
 
 .wallpaper-text {
@@ -68,8 +69,11 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 8px;
+  border-radius: 12px; /* ให้ตรงกับ .wallpaper-card */
   transition: filter 0.3s ease;
+  display: block; /* ลบช่องว่างด้านล่าง */
+  margin: 0;
+  padding: 0;
 }
 
 .wallpaper-image.loading-blur {
@@ -211,10 +215,12 @@
   .wallpaper-card-wrapper {
     max-width: min(calc(100% - 1rem), 280px);
     width: 100%;
+    padding: 0; /* ระบุชัดเจนว่าไม่มี padding */
   }
 
   .wallpaper-card {
     width: 100%;
+    padding: 0; /* ระบุชัดเจนว่าไม่มี padding */
   }
 
   .wallpaper-text {
@@ -265,10 +271,11 @@
 
   .wallpaper-card-wrapper {
     max-width: min(calc(100% - 0.5rem), 260px);
+    padding: 0; /* ระบุชัดเจนว่าไม่มี padding */
   }
 
   .wallpaper-card {
-    padding: 0.5rem;
+    padding: 0; /* ลบ padding ที่ทำให้เกิดขอบสีขาว */
   }
 
   .wallpaper-text {
@@ -317,10 +324,11 @@
 
   .wallpaper-card-wrapper {
     max-width: min(calc(100% - 0.25rem), 240px);
+    padding: 0; /* ระบุชัดเจนว่าไม่มี padding */
   }
 
   .wallpaper-card {
-    padding: 0.375rem;
+    padding: 0; /* ลบ padding ที่ทำให้เกิดขอบสีขาว */
   }
 
   .wallpaper-text {
