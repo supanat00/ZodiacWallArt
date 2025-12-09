@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import './WallpaperResult.css';
 import mockupBg from '../assets/mockup_bg.png';
 import mockupWallpaper01 from '../assets/mockup_wallpaper_01.png';
@@ -13,6 +13,7 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
   const [imageReadyTime, setImageReadyTime] = useState(null); // เวลาที่ภาพพร้อม
   const [componentMountTime] = useState(Date.now()); // เวลาที่ component mount
   const minimumLoadingTime = 4000; // อย่างน้อย 4 วินาที (4000ms)
+  const hasCalledFallbackRef = useRef(false); // ป้องกันการเรียก fallback API ซ้ำ
 
   // สุ่มเลือก mockup wallpaper สำหรับแสดงตอน loading
   const selectedMockupWallpaper = useMemo(() => {
@@ -40,12 +41,23 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
       console.log("✅ Received pre-generated image");
       setGeneratedImage(propGeneratedImage);
       setImageReadyTime(Date.now());
-    } else if (!generatedImage && !error && dateInfo) {
-      // ถ้ายังไม่มีภาพ ให้เรียก API สร้างภาพ (fallback)
+      hasCalledFallbackRef.current = false; // Reset เมื่อได้รับภาพใหม่
+    } else if (!generatedImage && !error && dateInfo && !hasCalledFallbackRef.current) {
+      // ถ้ายังไม่มีภาพ ให้เรียก API สร้างภาพ (fallback) - เรียกแค่ครั้งเดียว
+      hasCalledFallbackRef.current = true; // ตั้ง flag ก่อนเรียก API
+      console.log("🎨 Starting wallpaper generation (fallback) with dateInfo:", dateInfo);
+
+      let isCancelled = false;
+
       const generateImage = async () => {
         try {
-          console.log("🎨 Starting wallpaper generation (fallback) with dateInfo:", dateInfo);
           const result = await generateWallpaperImage(dateInfo);
+
+          // ตรวจสอบว่า component ยัง mount อยู่หรือไม่
+          if (isCancelled) {
+            console.log("⚠️ Component unmounted, skipping fallback image result");
+            return;
+          }
 
           if (result.success && result.base64) {
             console.log("✅ Image generated successfully (fallback)");
@@ -58,18 +70,26 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
           }
         } catch (error) {
           console.error("❌ Error in generateImage:", error);
-          setError(error.message || "เกิดข้อผิดพลาดในการสร้างภาพ");
-          setIsLoading(false);
+          if (!isCancelled) {
+            setError(error.message || "เกิดข้อผิดพลาดในการสร้างภาพ");
+            setIsLoading(false);
+          }
         }
       };
 
       generateImage();
+
+      // Cleanup function
+      return () => {
+        isCancelled = true;
+        console.log("🧹 Cleanup: ยกเลิกการเรียก fallback API สร้างภาพ");
+      };
     } else if (!dateInfo) {
       console.error("❌ dateInfo is missing");
       setError("ข้อมูลวันเกิดไม่ครบถ้วน");
       setIsLoading(false);
     }
-  }, [propGeneratedImage, dateInfo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [propGeneratedImage, dateInfo, generatedImage, error]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // จัดการ loading state โดยคำนึงถึง minimum loading time (นับจาก component mount)
   useEffect(() => {

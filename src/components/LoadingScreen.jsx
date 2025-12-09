@@ -21,6 +21,8 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
   // เก็บ dateInfo ที่เรียก API ไปแล้ว (ใช้ JSON.stringify เพื่อเปรียบเทียบ object)
   const calledDateInfoRef = useRef(null); // เก็บ dateInfo ที่เรียก API ทำนายดวงไปแล้ว
   const calledImageDateInfoRef = useRef(null); // เก็บ dateInfo ที่เรียก API สร้างภาพไปแล้ว
+  const isFortuneCallingRef = useRef(false); // Flag ว่า "กำลังเรียก API ทำนายดวงอยู่"
+  const isImageCallingRef = useRef(false); // Flag ว่า "กำลังเรียก API สร้างภาพอยู่"
 
   // Reset state เมื่อ component mount
   useEffect(() => {
@@ -43,21 +45,31 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
     // สร้าง unique key จาก dateInfo เพื่อตรวจสอบว่าเรียกไปแล้วหรือยัง
     const dateInfoKey = JSON.stringify(dateInfo);
 
-    // ป้องกันการเรียก API ซ้ำ (ตรวจสอบว่า dateInfo นี้เรียกไปแล้วหรือยัง)
-    if (calledDateInfoRef.current === dateInfoKey) {
-      console.log("⚠️ API ทำนายดวงถูกเรียกไปแล้วสำหรับ dateInfo นี้ ข้ามการเรียกซ้ำ");
+    // ป้องกันการเรียก API ซ้ำ (ตรวจสอบว่า dateInfo นี้เรียกไปแล้วหรือยัง หรือกำลังเรียกอยู่)
+    if (calledDateInfoRef.current === dateInfoKey || isFortuneCallingRef.current) {
+      console.log("⚠️ API ทำนายดวงถูกเรียกไปแล้วหรือกำลังเรียกอยู่สำหรับ dateInfo นี้ ข้ามการเรียกซ้ำ");
       return;
     }
 
-    // ตั้ง flag ว่าเรียก API ไปแล้ว (ตั้งก่อนเรียก async function เพื่อป้องกัน StrictMode double call)
+    // ตั้ง flag ว่าเรียก API ไปแล้วและกำลังเรียกอยู่ (ตั้งก่อนเรียก async function เพื่อป้องกัน StrictMode double call)
     calledDateInfoRef.current = dateInfoKey;
+    isFortuneCallingRef.current = true;
     console.log("🚀 เริ่มโหลดหน้าจอ LoadingScreen พร้อมข้อมูล:", dateInfo);
+
+    let isCancelled = false; // Flag สำหรับ cleanup
 
     const fetchFortune = async () => {
       try {
         setIsLoading(true);
         console.log("⏳ กำลังเรียก API ทำนายดวง...");
         const result = await getFortunePrediction(dateInfo);
+
+        // ตรวจสอบว่า component ยัง mount อยู่หรือไม่
+        if (isCancelled) {
+          console.log("⚠️ Component unmounted, skipping fortune result");
+          return;
+        }
+
         console.log("📥 ได้รับผลลัพธ์:", result.success ? "สำเร็จ" : "ล้มเหลว");
 
         if (result.success && result.prediction) {
@@ -77,9 +89,11 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
           setFadeOut(true);
           // หลังจาก fade out เสร็จ (1 วินาที) แสดงผล
           setTimeout(() => {
-            console.log("🎉 แสดงผลการทำนาย");
-            setShowResult(true);
-            setIsLoading(false);
+            if (!isCancelled) {
+              console.log("🎉 แสดงผลการทำนาย");
+              setShowResult(true);
+              setIsLoading(false);
+            }
           }, 1000);
         } else {
           // ถ้า API error ให้ใช้ error message
@@ -87,25 +101,43 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
             ? `เกิดข้อผิดพลาด: ${result.error}`
             : 'เกิดข้อผิดพลาดในการทำนายดวงชะตา กรุณาลองใหม่อีกครั้ง';
           console.error("❌ API Error:", result.error);
-          setPredictionText(errorMessage);
-          setFadeOut(true);
-          setTimeout(() => {
-            setShowResult(true);
-            setIsLoading(false);
-          }, 1000);
+          if (!isCancelled) {
+            setPredictionText(errorMessage);
+            setFadeOut(true);
+            setTimeout(() => {
+              if (!isCancelled) {
+                setShowResult(true);
+                setIsLoading(false);
+              }
+            }, 1000);
+          }
         }
       } catch (error) {
         console.error('❌ Error fetching fortune:', error);
-        setPredictionText(`เกิดข้อผิดพลาด: ${error.message || 'กรุณาลองใหม่อีกครั้ง'}`);
-        setFadeOut(true);
-        setTimeout(() => {
-          setShowResult(true);
-          setIsLoading(false);
-        }, 1000);
+        if (!isCancelled) {
+          setPredictionText(`เกิดข้อผิดพลาด: ${error.message || 'กรุณาลองใหม่อีกครั้ง'}`);
+          setFadeOut(true);
+          setTimeout(() => {
+            if (!isCancelled) {
+              setShowResult(true);
+              setIsLoading(false);
+            }
+          }, 1000);
+        }
+      } finally {
+        // Reset flag เมื่อเสร็จสิ้น (ไม่ว่าจะสำเร็จหรือล้มเหลว)
+        isFortuneCallingRef.current = false;
       }
     };
 
     fetchFortune();
+
+    // Cleanup function: ยกเลิกการทำงานถ้า component unmount
+    return () => {
+      isCancelled = true;
+      isFortuneCallingRef.current = false;
+      console.log("🧹 Cleanup: ยกเลิกการเรียก API ทำนายดวง");
+    };
   }, [dateInfo]);
 
   // เรียก API สร้างภาพพร้อมกับ API ทำนายดวง (เรียกแค่ครั้งเดียว)
@@ -118,20 +150,29 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
     // สร้าง unique key จาก dateInfo เพื่อตรวจสอบว่าเรียกไปแล้วหรือยัง
     const dateInfoKey = JSON.stringify(dateInfo);
 
-    // ป้องกันการเรียก API ซ้ำ (ตรวจสอบว่า dateInfo นี้เรียกไปแล้วหรือยัง)
-    if (calledImageDateInfoRef.current === dateInfoKey) {
-      console.log("⚠️ Image API ถูกเรียกไปแล้วสำหรับ dateInfo นี้ ข้ามการเรียกซ้ำ");
+    // ป้องกันการเรียก API ซ้ำ (ตรวจสอบว่า dateInfo นี้เรียกไปแล้วหรือยัง หรือกำลังเรียกอยู่)
+    if (calledImageDateInfoRef.current === dateInfoKey || isImageCallingRef.current) {
+      console.log("⚠️ Image API ถูกเรียกไปแล้วหรือกำลังเรียกอยู่สำหรับ dateInfo นี้ ข้ามการเรียกซ้ำ");
       return;
     }
 
-    // ตั้ง flag ว่าเรียก API ไปแล้ว (ตั้งก่อนเรียก async function เพื่อป้องกัน StrictMode double call)
+    // ตั้ง flag ว่าเรียก API ไปแล้วและกำลังเรียกอยู่ (ตั้งก่อนเรียก async function เพื่อป้องกัน StrictMode double call)
     calledImageDateInfoRef.current = dateInfoKey;
+    isImageCallingRef.current = true;
     console.log("🎨 เริ่มสร้างภาพวอลเปเปอร์พร้อมกับทำนายดวง");
+
+    let isCancelled = false; // Flag สำหรับ cleanup
 
     const generateImage = async () => {
       try {
         console.log("⏳ กำลังเรียก API สร้างภาพ...");
         const result = await generateWallpaperImage(dateInfo);
+
+        // ตรวจสอบว่า component ยัง mount อยู่หรือไม่
+        if (isCancelled) {
+          console.log("⚠️ Component unmounted, skipping image result");
+          return;
+        }
 
         if (result.success && result.base64) {
           console.log("✅ ภาพสร้างเสร็จแล้ว");
@@ -148,26 +189,36 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
           }
 
           // ส่งภาพไปยัง parent component
-          if (onImageGenerated) {
+          if (onImageGenerated && !isCancelled) {
             onImageGenerated(result.base64);
           }
         } else {
           console.error("❌ Image generation failed:", result.error);
           // ส่ง null ถ้าเกิด error
-          if (onImageGenerated) {
+          if (onImageGenerated && !isCancelled) {
             onImageGenerated(null);
           }
         }
       } catch (error) {
         console.error('❌ Error generating image:', error);
         // ส่ง null ถ้าเกิด error
-        if (onImageGenerated) {
+        if (onImageGenerated && !isCancelled) {
           onImageGenerated(null);
         }
+      } finally {
+        // Reset flag เมื่อเสร็จสิ้น (ไม่ว่าจะสำเร็จหรือล้มเหลว)
+        isImageCallingRef.current = false;
       }
     };
 
     generateImage();
+
+    // Cleanup function: ยกเลิกการทำงานถ้า component unmount
+    return () => {
+      isCancelled = true;
+      isImageCallingRef.current = false;
+      console.log("🧹 Cleanup: ยกเลิกการเรียก API สร้างภาพ");
+    };
     // ลบ onImageGenerated ออกจาก dependency array เพราะเราใช้ useCallback แล้ว
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateInfo]);
