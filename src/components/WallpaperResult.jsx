@@ -1,0 +1,230 @@
+import { useState, useEffect, useMemo } from 'react';
+import './WallpaperResult.css';
+import mockupBg from '../assets/mockup_bg.png';
+import mockupWallpaper01 from '../assets/mockup_wallpaper_01.png';
+import mockupWallpaper02 from '../assets/mockup_wallpaper_02.png';
+import { generateWallpaperImage } from '../services/imageGenerationApi';
+
+function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGeneratedImage, onPlayAgain }) {
+  const [isLoading, setIsLoading] = useState(true);
+  const [dots, setDots] = useState('');
+  const [generatedImage, setGeneratedImage] = useState(propGeneratedImage || null);
+  const [error, setError] = useState(null);
+  const [imageReadyTime, setImageReadyTime] = useState(null); // เวลาที่ภาพพร้อม
+  const [componentMountTime] = useState(Date.now()); // เวลาที่ component mount
+  const minimumLoadingTime = 4000; // อย่างน้อย 4 วินาที (4000ms)
+
+  // สุ่มเลือก mockup wallpaper สำหรับแสดงตอน loading
+  const selectedMockupWallpaper = useMemo(() => {
+    const mockups = [mockupWallpaper01, mockupWallpaper02];
+    return mockups[Math.floor(Math.random() * mockups.length)];
+  }, []);
+
+  useEffect(() => {
+    // Animated dots
+    const dotsInterval = setInterval(() => {
+      setDots(prev => {
+        if (prev === '...') return '';
+        return prev + '.';
+      });
+    }, 500);
+
+    return () => {
+      clearInterval(dotsInterval);
+    };
+  }, []);
+
+  // รับภาพจาก prop (ที่สร้างไว้แล้วใน LoadingScreen) หรือเรียก API fallback
+  useEffect(() => {
+    if (propGeneratedImage) {
+      console.log("✅ Received pre-generated image");
+      setGeneratedImage(propGeneratedImage);
+      setImageReadyTime(Date.now());
+    } else if (!generatedImage && !error && dateInfo) {
+      // ถ้ายังไม่มีภาพ ให้เรียก API สร้างภาพ (fallback)
+      const generateImage = async () => {
+        try {
+          console.log("🎨 Starting wallpaper generation (fallback) with dateInfo:", dateInfo);
+          const result = await generateWallpaperImage(dateInfo);
+
+          if (result.success && result.base64) {
+            console.log("✅ Image generated successfully (fallback)");
+            setGeneratedImage(result.base64);
+            setImageReadyTime(Date.now());
+          } else {
+            console.error("❌ Image generation failed:", result.error);
+            setError(result.error || "เกิดข้อผิดพลาดในการสร้างภาพ");
+            setIsLoading(false);
+          }
+        } catch (error) {
+          console.error("❌ Error in generateImage:", error);
+          setError(error.message || "เกิดข้อผิดพลาดในการสร้างภาพ");
+          setIsLoading(false);
+        }
+      };
+
+      generateImage();
+    } else if (!dateInfo) {
+      console.error("❌ dateInfo is missing");
+      setError("ข้อมูลวันเกิดไม่ครบถ้วน");
+      setIsLoading(false);
+    }
+  }, [propGeneratedImage, dateInfo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // จัดการ loading state โดยคำนึงถึง minimum loading time (นับจาก component mount)
+  useEffect(() => {
+    if (generatedImage && imageReadyTime) {
+      const elapsedSinceMount = Date.now() - componentMountTime;
+      const remainingTime = Math.max(0, minimumLoadingTime - elapsedSinceMount);
+
+      if (remainingTime > 0) {
+        console.log(`⏳ Waiting ${remainingTime}ms more to meet minimum loading time (${elapsedSinceMount}ms elapsed)`);
+        const timer = setTimeout(() => {
+          console.log("✅ Minimum loading time reached, showing image");
+          setIsLoading(false);
+        }, remainingTime);
+        return () => clearTimeout(timer);
+      } else {
+        // ถ้าเวลาผ่านไปแล้วมากกว่า minimum time ให้แสดงทันที
+        console.log(`✅ Image ready and minimum time already passed (${elapsedSinceMount}ms elapsed)`);
+        setIsLoading(false);
+      }
+    } else if (error) {
+      setIsLoading(false);
+    }
+  }, [generatedImage, imageReadyTime, error, componentMountTime]);
+
+  const handleDownload = () => {
+    if (isLoading || !generatedImage) return;
+
+    try {
+      // สร้าง link สำหรับดาวน์โหลด
+      const link = document.createElement('a');
+      link.href = generatedImage;
+      link.download = `wallpaper-mongkol-${Date.now()}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      console.log('✅ Wallpaper downloaded successfully');
+    } catch (error) {
+      console.error('❌ Error downloading wallpaper:', error);
+    }
+  };
+
+  const handleShare = async () => {
+    if (isLoading || !generatedImage) return;
+
+    try {
+      // แปลง base64 เป็น blob
+      const response = await fetch(generatedImage);
+      const blob = await response.blob();
+      const file = new File([blob], `wallpaper-mongkol-${Date.now()}.png`, { type: 'image/png' });
+
+      // ใช้ Web Share API
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: 'วอลเปเปอร์มงคลเสริมดวง',
+          text: 'รับวอลเปเปอร์มงคลเสริมดวง',
+          files: [file],
+        });
+        console.log('✅ Wallpaper shared successfully');
+      } else if (navigator.share) {
+        // ถ้าไม่รองรับ file sharing ให้แชร์ URL แทน
+        await navigator.share({
+          title: 'วอลเปเปอร์มงคลเสริมดวง',
+          text: 'รับวอลเปเปอร์มงคลเสริมดวง',
+          url: window.location.href,
+        });
+        console.log('✅ Wallpaper URL shared successfully');
+      } else {
+        // Fallback: คัดลอก base64 ไปยัง clipboard
+        await navigator.clipboard.writeText(generatedImage);
+        alert('คัดลอกภาพไปยังคลิปบอร์ดแล้ว');
+        console.log('✅ Wallpaper copied to clipboard');
+      }
+    } catch (error) {
+      console.error('❌ Error sharing wallpaper:', error);
+      // Fallback: คัดลอก base64 ไปยัง clipboard
+      try {
+        await navigator.clipboard.writeText(generatedImage);
+        alert('คัดลอกภาพไปยังคลิปบอร์ดแล้ว');
+      } catch (clipboardError) {
+        console.error('❌ Error copying to clipboard:', clipboardError);
+      }
+    }
+  };
+
+  return (
+    <div className="wallpaper-result" style={{ backgroundImage: `url(${mockupBg})` }}>
+      <div className="wallpaper-header">
+        วอลเปเปอร์มงคลเสริมดวง
+      </div>
+      <div className="wallpaper-card-wrapper">
+        <div className="wallpaper-card">
+          {isLoading && (
+            <div className="wallpaper-loading-text">
+              กำลังใช้แต้มดวงสร้างภาพ{dots}
+            </div>
+          )}
+          {error ? (
+            <div className="wallpaper-error">
+              <p>{error}</p>
+              <p style={{ fontSize: '0.9rem', marginTop: '0.5rem', opacity: 0.7 }}>
+                กำลังแสดงภาพตัวอย่าง
+              </p>
+            </div>
+          ) : null}
+          <img
+            src={generatedImage || wallpaperUrl || selectedMockupWallpaper}
+            alt="Wallpaper"
+            className={`wallpaper-image ${isLoading ? 'loading-blur' : ''}`}
+            onError={(e) => {
+              console.error('❌ Error loading image, using fallback');
+              e.target.src = selectedMockupWallpaper;
+            }}
+          />
+        </div>
+        <div className="wallpaper-actions-bottom">
+          <button
+            className={`play-again-text-button ${isLoading ? 'disabled' : ''}`}
+            onClick={onPlayAgain}
+            disabled={isLoading}
+          >
+            เล่นอีกครั้ง
+          </button>
+          <div className="action-buttons-right">
+            <button
+              className={`action-button download-button ${isLoading ? 'disabled' : ''}`}
+              onClick={handleDownload}
+              title="ดาวน์โหลด"
+              disabled={isLoading}
+            >
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+            </button>
+            <button
+              className={`action-button share-button ${isLoading ? 'disabled' : ''}`}
+              onClick={handleShare}
+              title="แชร์"
+              disabled={isLoading}
+            >
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="18" cy="5" r="3"></circle>
+                <circle cx="6" cy="12" r="3"></circle>
+                <circle cx="18" cy="19" r="3"></circle>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default WallpaperResult;
+
