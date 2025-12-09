@@ -15,7 +15,7 @@ export const API_CONFIG = {
   fortune: {
     endpoint: "https://api.openai.com/v1/chat/completions", // ค่าคงที่
     apiKey: OPENAI_API_KEY,
-    model: import.meta.env.VITE_FORTUNE_MODEL || "gpt-5-nano",
+    model: import.meta.env.VITE_FORTUNE_MODEL || "gpt-5.1",
   },
 
   // Image Generation API
@@ -24,7 +24,7 @@ export const API_CONFIG = {
     apiKey: OPENAI_API_KEY,
     model: import.meta.env.VITE_IMAGE_MODEL || "dall-e-3",
     defaultSize: "1024x1792", // 9:16 ratio
-    defaultQuality: "standard",
+    defaultQuality: "hd",
     defaultStyle: "natural",
   },
 

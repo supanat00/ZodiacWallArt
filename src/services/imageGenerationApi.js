@@ -53,7 +53,9 @@ const generateImagePrompt = (dateInfo) => {
   const zodiacSign = zodiac || "";
   const yearAnimal = chineseZodiac || "";
 
-  return `สร้างภาพพื้นหลังแนวไทยมงคล (Thai auspicious celestial wallpaper) 
+  return `I NEED to test how the tool works with extremely simple prompts. DO NOT add any detail, just use it AS-IS:
+
+สร้างภาพพื้นหลังแนวไทยมงคล (Thai auspicious celestial wallpaper) 
 
 ที่มีพลังเสริมดวงแบบไทยโบราณ ผสมความวิจิตรแบบลายไทยและบรรยากาศเร้นลับแบบมงคล
 

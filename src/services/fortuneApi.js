@@ -5,7 +5,7 @@
 
 // API Configuration
 const API_KEY = import.meta.env.VITE_OPENAI_API_KEY || "";
-const FORTUNE_MODEL = import.meta.env.VITE_FORTUNE_MODEL || "gpt-5-nano";
+const FORTUNE_MODEL = import.meta.env.VITE_FORTUNE_MODEL || "gpt-5.1";
 const API_ENDPOINT = "https://api.openai.com/v1/responses";
 
 /**
@@ -186,6 +186,38 @@ export const getFortunePrediction = async (dateInfo) => {
     const data = await resp.json();
     console.log("✅ ได้รับผลลัพธ์จาก API");
 
+    // แสดง token usage (ถ้ามี)
+    if (data.usage) {
+      const usage = data.usage;
+      const promptTokens = usage.prompt_tokens || usage.promptTokens || 0;
+      const completionTokens =
+        usage.completion_tokens || usage.completionTokens || 0;
+      const totalTokens =
+        usage.total_tokens ||
+        usage.totalTokens ||
+        promptTokens + completionTokens;
+
+      console.log("📊 Token Usage (Fortune Prediction):", {
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        total_tokens: totalTokens,
+      });
+
+      // เก็บ token usage ใน window สำหรับแสดงผล
+      if (typeof window !== "undefined") {
+        window.lastFortuneTokenUsage = {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: totalTokens,
+        };
+      }
+    } else {
+      console.log("⚠️ ไม่พบ token usage ใน response");
+      if (typeof window !== "undefined") {
+        window.lastFortuneTokenUsage = null;
+      }
+    }
+
     // Parse response ตามรูปแบบ API
     let reply = null;
 
@@ -218,9 +250,15 @@ export const getFortunePrediction = async (dateInfo) => {
 
     if (reply) {
       console.log("📊 ความยาวของผลลัพธ์:", reply.length, "ตัวอักษร");
+
+      // เพิ่ม token usage ใน response (ถ้ามี)
+      const tokenUsage =
+        typeof window !== "undefined" ? window.lastFortuneTokenUsage : null;
+
       return {
         success: true,
         prediction: reply,
+        tokenUsage: tokenUsage, // เพิ่ม token usage ใน response
       };
     } else {
       console.error("❌ ไม่พบ response text ในข้อมูล:", data);

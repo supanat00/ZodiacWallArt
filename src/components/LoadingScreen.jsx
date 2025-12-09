@@ -62,6 +62,16 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
 
         if (result.success && result.prediction) {
           console.log("✅ ตั้งค่า prediction text ความยาว:", result.prediction.length);
+
+          // แสดง token usage (ถ้ามี)
+          if (result.tokenUsage) {
+            console.log("💰 Token Usage (ทำนายดวง):", {
+              prompt_tokens: result.tokenUsage.prompt_tokens,
+              completion_tokens: result.tokenUsage.completion_tokens,
+              total_tokens: result.tokenUsage.total_tokens,
+            });
+          }
+
           setPredictionText(result.prediction);
           // เริ่ม fade out หลังจากได้ผลลัพธ์
           setFadeOut(true);
@@ -125,6 +135,18 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
 
         if (result.success && result.base64) {
           console.log("✅ ภาพสร้างเสร็จแล้ว");
+
+          // แสดง token usage (ถ้ามี)
+          if (result.tokenUsage) {
+            console.log("💰 Token Usage (สร้างภาพ):", {
+              prompt_tokens: result.tokenUsage.prompt_tokens,
+              completion_tokens: result.tokenUsage.completion_tokens,
+              total_tokens: result.tokenUsage.total_tokens,
+            });
+          } else {
+            console.log("⚠️ ไม่พบ token usage สำหรับการสร้างภาพ (อาจเป็นปกติสำหรับ image generation API)");
+          }
+
           // ส่งภาพไปยัง parent component
           if (onImageGenerated) {
             onImageGenerated(result.base64);
