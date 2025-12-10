@@ -278,44 +278,89 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
     }
   };
 
-  // Handler สำหรับปุ่ม save&share (สำหรับ LINE LIFF - เปิด blob URL ใน external browser)
+  // Handler สำหรับปุ่ม save&share (สำหรับ LINE LIFF - สร้าง HTML page ที่มีภาพแล้วเปิดใน external browser)
   const handleSaveAndShare = () => {
     if (isLoading || !generatedImage) return;
 
-    // ใช้ blob URL สำหรับเปิดใน external browser
-    const imageUrl = imageBlobUrl || generatedImage;
+    // ใช้ base64 image โดยตรง (data URL)
+    const imageBase64 = generatedImage;
 
-    if (!imageUrl) {
-      console.warn('⚠️ No image URL available');
-      alert('ยังไม่มีลิงก์ภาพ กรุณารอสักครู่...');
+    if (!imageBase64) {
+      console.warn('⚠️ No image available');
+      alert('ยังไม่มีภาพ กรุณารอสักครู่...');
       return;
     }
 
-    // Log URL ที่จะเปิด (สำหรับ debug)
-    console.log('🔗 Opening blob URL:', imageUrl);
-
     try {
+      // สร้าง HTML page ที่มีภาพเพื่อเปิดใน external browser
+      const htmlContent = `
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>วอลเปเปอร์มงคลเสริมดวง</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: #000;
+      padding: 20px;
+    }
+    img {
+      max-width: 100%;
+      max-height: 100vh;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+  <img src="${imageBase64}" alt="วอลเปเปอร์มงคลเสริมดวง" />
+</body>
+</html>
+      `;
+
+      // สร้าง blob URL จาก HTML
+      const blob = new Blob([htmlContent], { type: 'text/html' });
+      const htmlUrl = URL.createObjectURL(blob);
+
+      console.log('🔗 Opening HTML page with image in external browser');
+
       // ตรวจสอบว่า LIFF พร้อมหรือไม่
       if (isLiffReady() && isInLine()) {
         // ใช้ LIFF openWindow สำหรับเปิด external browser
         const liffInstance = window.liff;
         if (liffInstance && liffInstance.openWindow) {
           liffInstance.openWindow({
-            url: imageUrl,
+            url: htmlUrl,
             external: true,
           });
-          console.log('✅ Opening external browser for blob URL:', imageUrl);
+          console.log('✅ Opening external browser with image HTML');
+          // Revoke URL หลังจากเปิด (รอสักครู่)
+          setTimeout(() => URL.revokeObjectURL(htmlUrl), 2000);
           return;
         }
       }
 
       // Fallback: เปิดใน tab ใหม่
-      window.open(imageUrl, '_blank');
-      console.log('✅ Opening blob URL in new tab:', imageUrl);
+      const newWindow = window.open('', '_blank');
+      if (newWindow) {
+        newWindow.document.write(htmlContent);
+        newWindow.document.close();
+        console.log('✅ Opening image HTML in new tab');
+        // Revoke URL หลังจากเปิด
+        setTimeout(() => URL.revokeObjectURL(htmlUrl), 2000);
+      }
     } catch (error) {
       console.error('❌ Error opening external browser:', error);
-      // Fallback: เปิดใน tab ใหม่
-      window.open(imageUrl, '_blank');
+      alert('ไม่สามารถเปิดภาพได้ กรุณาลองใหม่อีกครั้ง');
     }
   };
 
