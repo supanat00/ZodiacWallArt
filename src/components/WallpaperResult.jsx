@@ -5,18 +5,22 @@ import mockupWallpaper01 from '../assets/mockup_wallpaper_01.png';
 import mockupWallpaper02 from '../assets/mockup_wallpaper_02.png';
 import { generateWallpaperImage } from '../services/imageGenerationApi';
 import { isLiffReady, isInLine, shareImageToLine } from '../services/liffService';
+import { uploadImageToCloudinary } from '../services/cloudinaryService';
 
 function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGeneratedImage, onPlayAgain }) {
   const [isLoading, setIsLoading] = useState(true);
   const [dots, setDots] = useState('');
   const [generatedImage, setGeneratedImage] = useState(propGeneratedImage || null);
   const [imageBlobUrl, setImageBlobUrl] = useState(null); // Blob URL สำหรับดาวน์โหลด/แชร์
+  const [cloudinaryUrl, setCloudinaryUrl] = useState(null); // Cloudinary URL สำหรับเปิด external browser
+  const [isUploading, setIsUploading] = useState(false); // สถานะการอัปโหลด
   const [error, setError] = useState(null);
   const [imageReadyTime, setImageReadyTime] = useState(null); // เวลาที่ภาพพร้อม
   const [componentMountTime] = useState(Date.now()); // เวลาที่ component mount
   const minimumLoadingTime = 4000; // อย่างน้อย 4 วินาที (4000ms)
   const hasCalledFallbackRef = useRef(false); // ป้องกันการเรียก fallback API ซ้ำ
   const lastDateInfoKeyRef = useRef(null); // เก็บ dateInfo key ล่าสุดที่เรียก API
+  const hasUploadedRef = useRef(false); // ป้องกันการอัปโหลดซ้ำ
 
   // สุ่มเลือก mockup wallpaper สำหรับแสดงตอน loading
   const selectedMockupWallpaper = useMemo(() => {
@@ -75,6 +79,8 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
       if (lastDateInfoKeyRef.current !== dateInfoKey) {
         hasCalledFallbackRef.current = false;
         lastDateInfoKeyRef.current = dateInfoKey;
+        hasUploadedRef.current = false; // Reset upload flag
+        setCloudinaryUrl(null); // Reset Cloudinary URL
       }
     } else if (!generatedImage && !error && dateInfo) {
       // ตรวจสอบว่า dateInfo เปลี่ยนหรือไม่ (ถ้าเปลี่ยน ให้ reset flags)
@@ -106,6 +112,9 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
               setImageReadyTime(Date.now());
               // สร้าง Blob URL จาก base64
               createBlobUrlFromBase64(result.base64);
+              // Reset upload flag
+              hasUploadedRef.current = false;
+              setCloudinaryUrl(null);
             } else {
               console.error("❌ Image generation failed:", result.error);
               if (!isCancelled && lastDateInfoKeyRef.current === dateInfoKey) {
@@ -135,7 +144,7 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
       setError("ข้อมูลวันเกิดไม่ครบถ้วน");
       setIsLoading(false);
     }
-  }, [propGeneratedImage, dateInfo, createBlobUrlFromBase64]); // เพิ่ม createBlobUrlFromBase64 ใน dependency
+  }, [propGeneratedImage, dateInfo, createBlobUrlFromBase64, generatedImage, error]); // เพิ่ม createBlobUrlFromBase64 ใน dependency
 
   // จัดการ loading state โดยคำนึงถึง minimum loading time (นับจาก component mount)
   useEffect(() => {
@@ -160,6 +169,31 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
     }
   }, [generatedImage, imageReadyTime, error, componentMountTime]);
 
+
+  // อัปโหลดภาพไปยัง Cloudinary เมื่อภาพพร้อม
+  useEffect(() => {
+    if (generatedImage && !isLoading && !hasUploadedRef.current && !cloudinaryUrl) {
+      const uploadImage = async () => {
+        setIsUploading(true);
+        hasUploadedRef.current = true; // ตั้ง flag ก่อนอัปโหลด
+        console.log('📤 Uploading image to Cloudinary...');
+
+        const result = await uploadImageToCloudinary(generatedImage, 'zodiac');
+
+        if (result.success && result.url) {
+          setCloudinaryUrl(result.url);
+          console.log('✅ Image uploaded to Cloudinary:', result.url);
+        } else {
+          console.error('❌ Failed to upload to Cloudinary:', result.error);
+          hasUploadedRef.current = false; // Reset flag ถ้าอัปโหลดไม่สำเร็จ
+        }
+
+        setIsUploading(false);
+      };
+
+      uploadImage();
+    }
+  }, [generatedImage, isLoading, cloudinaryUrl]);
 
   // ทำความสะอาด Blob URL เมื่อ component unmount
   useEffect(() => {
@@ -278,86 +312,51 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
     }
   };
 
-  // Handler สำหรับปุ่ม save&share (สำหรับ LINE LIFF - สร้าง HTML page ที่มีภาพแล้วเปิดใน external browser)
-  const handleSaveAndShare = () => {
+  // Handler สำหรับปุ่ม save&share (สำหรับ LINE LIFF - เปิด Cloudinary URL ใน external browser)
+  const handleSaveAndShare = async () => {
     if (isLoading || !generatedImage) return;
 
-    // ใช้ base64 image โดยตรง (data URL)
-    const imageBase64 = generatedImage;
+    // ใช้ Cloudinary URL ถ้ามี (แนะนำ) หรือ fallback เป็น blob URL
+    const imageUrl = cloudinaryUrl || imageBlobUrl || generatedImage;
 
-    if (!imageBase64) {
-      console.warn('⚠️ No image available');
-      alert('ยังไม่มีภาพ กรุณารอสักครู่...');
+    if (!imageUrl) {
+      console.warn('⚠️ No image URL available');
+      alert('ยังไม่มีลิงก์ภาพ กรุณารอสักครู่...');
       return;
     }
 
+    // ถ้ายังไม่มี Cloudinary URL และกำลังอัปโหลดอยู่
+    if (!cloudinaryUrl && isUploading) {
+      alert('กำลังอัปโหลดภาพ กรุณารอสักครู่แล้วลองอีกครั้ง');
+      return;
+    }
+
+    // Log URL ที่จะเปิด (สำหรับ debug)
+    console.log('🔗 Opening URL:', cloudinaryUrl ? 'Cloudinary URL' : 'Fallback URL');
+
     try {
-      // สร้าง HTML page ที่มีภาพเพื่อเปิดใน external browser
-      const htmlContent = `
-<!DOCTYPE html>
-<html lang="th">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>วอลเปเปอร์มงคลเสริมดวง</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    body {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-      background: #000;
-      padding: 20px;
-    }
-    img {
-      max-width: 100%;
-      max-height: 100vh;
-      object-fit: contain;
-    }
-  </style>
-</head>
-<body>
-  <img src="${imageBase64}" alt="วอลเปเปอร์มงคลเสริมดวง" />
-</body>
-</html>
-      `;
-
-      // สร้าง blob URL จาก HTML
-      const blob = new Blob([htmlContent], { type: 'text/html' });
-      const htmlUrl = URL.createObjectURL(blob);
-
-      console.log('🔗 Opening HTML page with image in external browser');
-
       // ตรวจสอบว่า LIFF พร้อมหรือไม่
       if (isLiffReady() && isInLine()) {
         // ใช้ LIFF openWindow สำหรับเปิด external browser
+        // ตามตัวอย่าง: liff.openWindow({ url: "https://...", external: true })
         const liffInstance = window.liff;
         if (liffInstance && liffInstance.openWindow) {
-          liffInstance.openWindow({
-            url: htmlUrl,
+          await liffInstance.openWindow({
+            url: imageUrl,
             external: true,
           });
-          console.log('✅ Opening external browser with image HTML');
-          // Revoke URL หลังจากเปิด (รอสักครู่)
-          setTimeout(() => URL.revokeObjectURL(htmlUrl), 2000);
+          console.log('✅ Opening external browser with Cloudinary URL via liff.openWindow');
           return;
+        } else {
+          console.warn('⚠️ liff.openWindow is not available');
         }
+      } else {
+        console.log('ℹ️ Not in LINE app, using fallback');
       }
 
       // Fallback: เปิดใน tab ใหม่
-      const newWindow = window.open('', '_blank');
-      if (newWindow) {
-        newWindow.document.write(htmlContent);
-        newWindow.document.close();
-        console.log('✅ Opening image HTML in new tab');
-        // Revoke URL หลังจากเปิด
-        setTimeout(() => URL.revokeObjectURL(htmlUrl), 2000);
-      }
+      window.open(imageUrl, '_blank');
+      console.log('✅ Opening URL in new tab (fallback)');
     } catch (error) {
       console.error('❌ Error opening external browser:', error);
       alert('ไม่สามารถเปิดภาพได้ กรุณาลองใหม่อีกครั้ง');
@@ -403,12 +402,12 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
             เล่นอีกครั้ง
           </button>
           <button
-            className={`play-again-text-button save-share-button ${isLoading ? 'disabled' : ''}`}
+            className={`play-again-text-button save-share-button ${isLoading || isUploading ? 'disabled' : ''}`}
             onClick={handleSaveAndShare}
-            disabled={isLoading}
+            disabled={isLoading || isUploading}
             style={{ marginLeft: '0.5rem' }}
           >
-            save&share
+            {isUploading ? 'กำลังอัปโหลด...' : 'save&share'}
           </button>
         </div>
       </div>
