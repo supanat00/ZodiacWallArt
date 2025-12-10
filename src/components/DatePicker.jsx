@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import logo from '../assets/logo.png';
 import lineSvg from '../assets/line.svg';
-import { isLiffReady, isInLine } from '../services/liffService';
+import { isLiffReady, isInLine, openExternalBrowser } from '../services/liffService';
 import './DatePicker.css';
 
 // Custom Select Component
@@ -317,113 +317,32 @@ function DatePicker({ onDateSelect }) {
     [day, month, year]
   );
 
-  // Handler สำหรับปุ่มทดสอบ - โหลด (โหลดตรงจาก URL)
-  const handleTestDownload = async () => {
+  // Handler สำหรับปุ่มทดสอบ - save&share (เปิด external browser ไปยังรูปภาพ)
+  const handleTestSaveAndShare = () => {
     const testImageUrl = 'https://res.cloudinary.com/da8eemrq8/image/upload/v1683659963/samples/animals/cat.jpg';
     
     try {
-      // โหลดภาพตรงจาก URL
-      const response = await fetch(testImageUrl);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const fileName = `test_cat_${Date.now()}.jpg`;
-
-      // ใช้ Blob URL สำหรับดาวน์โหลด
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = fileName;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-
-      // รอสักครู่แล้วลบ link และ revoke blob URL
-      setTimeout(() => {
-        document.body.removeChild(link);
-        URL.revokeObjectURL(blobUrl);
-      }, 100);
-
-      console.log('✅ Test image downloaded successfully');
-    } catch (error) {
-      console.error('❌ Error downloading test image:', error);
-      alert('ไม่สามารถดาวน์โหลดภาพทดสอบได้ กรุณาลองใหม่อีกครั้ง');
-    }
-  };
-
-  // Handler สำหรับปุ่มทดสอบ - แชร์ (โหลดตรงจาก URL)
-  const handleTestShare = async () => {
-    const testImageUrl = 'https://res.cloudinary.com/da8eemrq8/image/upload/v1683659963/samples/animals/cat.jpg';
-    
-    try {
-      // โหลดภาพตรงจาก URL
-      const response = await fetch(testImageUrl);
-      const blob = await response.blob();
-      const file = new File([blob], `test_cat_${Date.now()}.jpg`, {
-        type: 'image/jpeg',
-        lastModified: Date.now()
-      });
-
-      // ตรวจสอบว่าเป็น mobile หรือ LINE app
-      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      const isLineApp = isLiffReady() && isInLine();
-
-      // ใช้ Web Share API สำหรับ mobile และ LINE
-      if ((isMobile || isLineApp) && navigator.share) {
-        try {
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              title: 'ภาพทดสอบ',
-              text: 'ภาพทดสอบ',
-              files: [file],
-            });
-            console.log('✅ Test image shared successfully via Web Share API');
-            return;
-          }
-        } catch (shareError) {
-          // ถ้าไม่รองรับ file sharing ให้แชร์ URL แทน
-          console.log('⚠️ File share not supported, trying URL share:', shareError);
-          try {
-            await navigator.share({
-              title: 'ภาพทดสอบ',
-              text: 'ภาพทดสอบ',
-              url: testImageUrl,
-            });
-            console.log('✅ Test image URL shared successfully');
-            return;
-          } catch (urlShareError) {
-            console.log('⚠️ URL share also failed:', urlShareError);
-          }
+      // ตรวจสอบว่า LIFF พร้อมหรือไม่
+      if (isLiffReady() && isInLine()) {
+        // ใช้ LIFF openWindow สำหรับเปิด external browser
+        const liffInstance = window.liff;
+        if (liffInstance && liffInstance.openWindow) {
+          liffInstance.openWindow({
+            url: testImageUrl,
+            external: true,
+          });
+          console.log('✅ Opening external browser for image:', testImageUrl);
+          return;
         }
       }
-
-      // สำหรับ desktop หรือ fallback: แชร์ URL
-      if (navigator.share) {
-        await navigator.share({
-          title: 'ภาพทดสอบ',
-          text: 'ภาพทดสอบ',
-          url: testImageUrl,
-        });
-        console.log('✅ Test image URL shared successfully');
-      } else {
-        // Fallback: คัดลอก URL ไปยัง clipboard
-        try {
-          await navigator.clipboard.writeText(testImageUrl);
-          alert('คัดลอกลิงก์ไปยังคลิปบอร์ดแล้ว');
-          console.log('✅ URL copied to clipboard');
-        } catch (clipboardError) {
-          console.error('❌ Error copying to clipboard:', clipboardError);
-          alert('ไม่สามารถแชร์ได้ กรุณาลองใหม่อีกครั้ง');
-        }
-      }
+      
+      // Fallback: เปิดใน tab ใหม่
+      window.open(testImageUrl, '_blank');
+      console.log('✅ Opening image in new tab:', testImageUrl);
     } catch (error) {
-      console.error('❌ Error sharing test image:', error);
-      // Fallback: คัดลอก URL ไปยัง clipboard
-      try {
-        await navigator.clipboard.writeText(testImageUrl);
-        alert('คัดลอกลิงก์ไปยังคลิปบอร์ดแล้ว');
-      } catch (clipboardError) {
-        console.error('❌ Error copying to clipboard:', clipboardError);
-        alert('ไม่สามารถแชร์ได้ กรุณาลองใหม่อีกครั้ง');
-      }
+      console.error('❌ Error opening external browser:', error);
+      // Fallback: เปิดใน tab ใหม่
+      window.open(testImageUrl, '_blank');
     }
   };
 
@@ -501,30 +420,11 @@ function DatePicker({ onDateSelect }) {
         {/* ปุ่มทดสอบ */}
         <div className="test-buttons-container">
           <button
-            className="test-button test-download-button"
-            onClick={handleTestDownload}
-            title="ทดสอบดาวน์โหลด"
+            className="test-button test-save-share-button"
+            onClick={handleTestSaveAndShare}
+            title="save&share"
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-            <span>ทดสอบโหลด</span>
-          </button>
-          <button
-            className="test-button test-share-button"
-            onClick={handleTestShare}
-            title="ทดสอบแชร์"
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="18" cy="5" r="3"></circle>
-              <circle cx="6" cy="12" r="3"></circle>
-              <circle cx="18" cy="19" r="3"></circle>
-              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-            </svg>
-            <span>ทดสอบแชร์</span>
+            <span>save&share</span>
           </button>
         </div>
       </div>
