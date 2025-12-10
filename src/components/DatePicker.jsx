@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import logo from '../assets/logo.png';
 import lineSvg from '../assets/line.svg';
-import { isLiffReady, isInLine, openExternalBrowser } from '../services/liffService';
+import { isLiffReady, isInLine } from '../services/liffService';
 import './DatePicker.css';
 
 // Custom Select Component
@@ -317,35 +317,6 @@ function DatePicker({ onDateSelect }) {
     [day, month, year]
   );
 
-  // Handler สำหรับปุ่มทดสอบ - save&share (เปิด external browser ไปยังรูปภาพ)
-  const handleTestSaveAndShare = () => {
-    const testImageUrl = 'https://res.cloudinary.com/da8eemrq8/image/upload/v1683659963/samples/animals/cat.jpg';
-    
-    try {
-      // ตรวจสอบว่า LIFF พร้อมหรือไม่
-      if (isLiffReady() && isInLine()) {
-        // ใช้ LIFF openWindow สำหรับเปิด external browser
-        const liffInstance = window.liff;
-        if (liffInstance && liffInstance.openWindow) {
-          liffInstance.openWindow({
-            url: testImageUrl,
-            external: true,
-          });
-          console.log('✅ Opening external browser for image:', testImageUrl);
-          return;
-        }
-      }
-      
-      // Fallback: เปิดใน tab ใหม่
-      window.open(testImageUrl, '_blank');
-      console.log('✅ Opening image in new tab:', testImageUrl);
-    } catch (error) {
-      console.error('❌ Error opening external browser:', error);
-      // Fallback: เปิดใน tab ใหม่
-      window.open(testImageUrl, '_blank');
-    }
-  };
-
   const handleSubmit = () => {
     // ป้องกันการกดซ้ำ
     if (isSubmitting) {
@@ -417,16 +388,6 @@ function DatePicker({ onDateSelect }) {
         >
           {isSubmitting ? 'กำลังส่ง...' : 'เริ่มทำนาย'}
         </button>
-        {/* ปุ่มทดสอบ */}
-        <div className="test-buttons-container">
-          <button
-            className="test-button test-save-share-button"
-            onClick={handleTestSaveAndShare}
-            title="save&share"
-          >
-            <span>save&share</span>
-          </button>
-        </div>
       </div>
     </div>
   );

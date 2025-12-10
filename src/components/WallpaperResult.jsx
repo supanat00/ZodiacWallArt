@@ -171,6 +171,10 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
     };
   }, [imageBlobUrl]);
 
+  // ตรวจสอบว่าเปิดใน LINE LIFF หรือไม่
+  const isInLineApp = isLiffReady() && isInLine();
+
+  // Handler สำหรับปุ่ม download (สำหรับ browser ปกติ)
   const handleDownload = async () => {
     if (isLoading || !generatedImage || !imageBlobUrl) return;
 
@@ -185,7 +189,7 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
       document.body.appendChild(link);
       link.click();
 
-      // รอสักครู่แล้วลบ link (ไม่ต้อง revoke blob URL เพราะจะใช้ต่อสำหรับแชร์)
+      // รอสักครู่แล้วลบ link
       setTimeout(() => {
         document.body.removeChild(link);
       }, 100);
@@ -197,6 +201,7 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
     }
   };
 
+  // Handler สำหรับปุ่ม share (สำหรับ browser ปกติ)
   const handleShare = async () => {
     if (isLoading || !generatedImage || !imageBlobUrl) return;
 
@@ -209,12 +214,11 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
         lastModified: Date.now()
       });
 
-      // ตรวจสอบว่าเป็น mobile หรือ LINE app
+      // ตรวจสอบว่าเป็น mobile หรือไม่
       const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      const isLineApp = isLiffReady() && isInLine();
 
-      // ใช้ Web Share API สำหรับ mobile และ LINE
-      if ((isMobile || isLineApp) && navigator.share) {
+      // ใช้ Web Share API สำหรับ mobile
+      if (isMobile && navigator.share) {
         try {
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({
@@ -274,6 +278,47 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
     }
   };
 
+  // Handler สำหรับปุ่ม save&share (สำหรับ LINE LIFF - เปิด blob URL ใน external browser)
+  const handleSaveAndShare = () => {
+    if (isLoading || !generatedImage) return;
+
+    // ใช้ blob URL สำหรับเปิดใน external browser
+    const imageUrl = imageBlobUrl || generatedImage;
+
+    if (!imageUrl) {
+      console.warn('⚠️ No image URL available');
+      alert('ยังไม่มีลิงก์ภาพ กรุณารอสักครู่...');
+      return;
+    }
+
+    // Log URL ที่จะเปิด (สำหรับ debug)
+    console.log('🔗 Opening blob URL:', imageUrl);
+
+    try {
+      // ตรวจสอบว่า LIFF พร้อมหรือไม่
+      if (isLiffReady() && isInLine()) {
+        // ใช้ LIFF openWindow สำหรับเปิด external browser
+        const liffInstance = window.liff;
+        if (liffInstance && liffInstance.openWindow) {
+          liffInstance.openWindow({
+            url: imageUrl,
+            external: true,
+          });
+          console.log('✅ Opening external browser for blob URL:', imageUrl);
+          return;
+        }
+      }
+
+      // Fallback: เปิดใน tab ใหม่
+      window.open(imageUrl, '_blank');
+      console.log('✅ Opening blob URL in new tab:', imageUrl);
+    } catch (error) {
+      console.error('❌ Error opening external browser:', error);
+      // Fallback: เปิดใน tab ใหม่
+      window.open(imageUrl, '_blank');
+    }
+  };
+
   return (
     <div className="wallpaper-result" style={{ backgroundImage: `url(${mockupBg})` }}>
       <div className="wallpaper-header">
@@ -312,34 +357,14 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
           >
             เล่นอีกครั้ง
           </button>
-          <div className="action-buttons-right">
-            <button
-              className={`action-button download-button ${isLoading ? 'disabled' : ''}`}
-              onClick={handleDownload}
-              title="ดาวน์โหลด"
-              disabled={isLoading}
-            >
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-            </button>
-            <button
-              className={`action-button share-button ${isLoading ? 'disabled' : ''}`}
-              onClick={handleShare}
-              title="แชร์"
-              disabled={isLoading}
-            >
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="18" cy="5" r="3"></circle>
-                <circle cx="6" cy="12" r="3"></circle>
-                <circle cx="18" cy="19" r="3"></circle>
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-              </svg>
-            </button>
-          </div>
+          <button
+            className={`play-again-text-button save-share-button ${isLoading ? 'disabled' : ''}`}
+            onClick={handleSaveAndShare}
+            disabled={isLoading}
+            style={{ marginLeft: '0.5rem' }}
+          >
+            save&share
+          </button>
         </div>
       </div>
     </div>
