@@ -87,7 +87,6 @@ function DatePicker({ onDateSelect }) {
   const [month, setMonth] = useState('');
   const [year, setYear] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [testImageBlobUrl, setTestImageBlobUrl] = useState(null); // Blob URL สำหรับภาพทดสอบ
 
   const months = [
     { value: 1, label: 'มกราคม' },
@@ -318,56 +317,29 @@ function DatePicker({ onDateSelect }) {
     [day, month, year]
   );
 
-  // สร้าง Blob URL สำหรับภาพทดสอบ
-  useEffect(() => {
+  // Handler สำหรับปุ่มทดสอบ - โหลด (โหลดตรงจาก URL)
+  const handleTestDownload = async () => {
     const testImageUrl = 'https://res.cloudinary.com/da8eemrq8/image/upload/v1683659963/samples/animals/cat.jpg';
     
-    const createTestBlobUrl = async () => {
-      try {
-        const response = await fetch(testImageUrl);
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        setTestImageBlobUrl(blobUrl);
-        console.log('✅ Test image Blob URL created');
-      } catch (error) {
-        console.error('❌ Error creating test image Blob URL:', error);
-      }
-    };
-
-    createTestBlobUrl();
-  }, []);
-
-  // ทำความสะอาด test image Blob URL เมื่อ component unmount
-  useEffect(() => {
-    return () => {
-      if (testImageBlobUrl) {
-        URL.revokeObjectURL(testImageBlobUrl);
-        console.log('🧹 Cleaned up test image Blob URL on unmount');
-      }
-    };
-  }, [testImageBlobUrl]);
-
-  // Handler สำหรับปุ่มทดสอบ - โหลด
-  const handleTestDownload = async () => {
-    if (!testImageBlobUrl) {
-      alert('กำลังโหลดภาพทดสอบ...');
-      return;
-    }
-
     try {
+      // โหลดภาพตรงจาก URL
+      const response = await fetch(testImageUrl);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
       const fileName = `test_cat_${Date.now()}.jpg`;
 
-      // ใช้ Blob URL ที่สร้างไว้แล้วสำหรับดาวน์โหลด
+      // ใช้ Blob URL สำหรับดาวน์โหลด
       const link = document.createElement('a');
-      link.href = testImageBlobUrl;
+      link.href = blobUrl;
       link.download = fileName;
       link.style.display = 'none';
       document.body.appendChild(link);
       link.click();
 
-      // รอสักครู่แล้วลบ link
+      // รอสักครู่แล้วลบ link และ revoke blob URL
       setTimeout(() => {
         document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
       }, 100);
 
       console.log('✅ Test image downloaded successfully');
@@ -377,16 +349,13 @@ function DatePicker({ onDateSelect }) {
     }
   };
 
-  // Handler สำหรับปุ่มทดสอบ - แชร์
+  // Handler สำหรับปุ่มทดสอบ - แชร์ (โหลดตรงจาก URL)
   const handleTestShare = async () => {
-    if (!testImageBlobUrl) {
-      alert('กำลังโหลดภาพทดสอบ...');
-      return;
-    }
-
+    const testImageUrl = 'https://res.cloudinary.com/da8eemrq8/image/upload/v1683659963/samples/animals/cat.jpg';
+    
     try {
-      // แปลง Blob URL เป็น File object
-      const response = await fetch(testImageBlobUrl);
+      // โหลดภาพตรงจาก URL
+      const response = await fetch(testImageUrl);
       const blob = await response.blob();
       const file = new File([blob], `test_cat_${Date.now()}.jpg`, {
         type: 'image/jpeg',
@@ -416,7 +385,7 @@ function DatePicker({ onDateSelect }) {
             await navigator.share({
               title: 'ภาพทดสอบ',
               text: 'ภาพทดสอบ',
-              url: 'https://res.cloudinary.com/da8eemrq8/image/upload/v1683659963/samples/animals/cat.jpg',
+              url: testImageUrl,
             });
             console.log('✅ Test image URL shared successfully');
             return;
@@ -431,13 +400,13 @@ function DatePicker({ onDateSelect }) {
         await navigator.share({
           title: 'ภาพทดสอบ',
           text: 'ภาพทดสอบ',
-          url: 'https://res.cloudinary.com/da8eemrq8/image/upload/v1683659963/samples/animals/cat.jpg',
+          url: testImageUrl,
         });
         console.log('✅ Test image URL shared successfully');
       } else {
         // Fallback: คัดลอก URL ไปยัง clipboard
         try {
-          await navigator.clipboard.writeText('https://res.cloudinary.com/da8eemrq8/image/upload/v1683659963/samples/animals/cat.jpg');
+          await navigator.clipboard.writeText(testImageUrl);
           alert('คัดลอกลิงก์ไปยังคลิปบอร์ดแล้ว');
           console.log('✅ URL copied to clipboard');
         } catch (clipboardError) {
@@ -449,7 +418,7 @@ function DatePicker({ onDateSelect }) {
       console.error('❌ Error sharing test image:', error);
       // Fallback: คัดลอก URL ไปยัง clipboard
       try {
-        await navigator.clipboard.writeText('https://res.cloudinary.com/da8eemrq8/image/upload/v1683659963/samples/animals/cat.jpg');
+        await navigator.clipboard.writeText(testImageUrl);
         alert('คัดลอกลิงก์ไปยังคลิปบอร์ดแล้ว');
       } catch (clipboardError) {
         console.error('❌ Error copying to clipboard:', clipboardError);
@@ -535,7 +504,6 @@ function DatePicker({ onDateSelect }) {
             className="test-button test-download-button"
             onClick={handleTestDownload}
             title="ทดสอบดาวน์โหลด"
-            style={{ opacity: testImageBlobUrl ? 1 : 0.5 }}
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -548,7 +516,6 @@ function DatePicker({ onDateSelect }) {
             className="test-button test-share-button"
             onClick={handleTestShare}
             title="ทดสอบแชร์"
-            style={{ opacity: testImageBlobUrl ? 1 : 0.5 }}
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="18" cy="5" r="3"></circle>
