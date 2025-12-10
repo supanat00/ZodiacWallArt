@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import './WallpaperResult.css';
 import mockupBg from '../assets/mockup_bg.png';
 import mockupWallpaper01 from '../assets/mockup_wallpaper_01.png';
@@ -10,6 +10,7 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
   const [isLoading, setIsLoading] = useState(true);
   const [dots, setDots] = useState('');
   const [generatedImage, setGeneratedImage] = useState(propGeneratedImage || null);
+  const [imageBlobUrl, setImageBlobUrl] = useState(null); // Blob URL สำหรับดาวน์โหลด/แชร์
   const [error, setError] = useState(null);
   const [imageReadyTime, setImageReadyTime] = useState(null); // เวลาที่ภาพพร้อม
   const [componentMountTime] = useState(Date.now()); // เวลาที่ component mount
@@ -37,6 +38,28 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
     };
   }, []);
 
+  // สร้าง Blob URL จาก base64 image
+  const createBlobUrlFromBase64 = useCallback(async (base64String) => {
+    try {
+      // ลบ Blob URL เก่าถ้ามี
+      setImageBlobUrl(prevUrl => {
+        if (prevUrl) {
+          URL.revokeObjectURL(prevUrl);
+        }
+        return null;
+      });
+
+      // แปลง base64 เป็น blob
+      const response = await fetch(base64String);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      setImageBlobUrl(blobUrl);
+      console.log('✅ Blob URL created for download/share');
+    } catch (error) {
+      console.error('❌ Error creating Blob URL:', error);
+    }
+  }, []);
+
   // รับภาพจาก prop (ที่สร้างไว้แล้วใน LoadingScreen) หรือเรียก API fallback
   useEffect(() => {
     // สร้าง unique key จาก dateInfo เพื่อตรวจสอบ
@@ -46,6 +69,8 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
       console.log("✅ Received pre-generated image");
       setGeneratedImage(propGeneratedImage);
       setImageReadyTime(Date.now());
+      // สร้าง Blob URL จาก base64
+      createBlobUrlFromBase64(propGeneratedImage);
       // Reset flags เมื่อได้รับภาพใหม่ (อาจเป็น dateInfo ใหม่)
       if (lastDateInfoKeyRef.current !== dateInfoKey) {
         hasCalledFallbackRef.current = false;
@@ -79,6 +104,8 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
               console.log("✅ Image generated successfully (fallback)");
               setGeneratedImage(result.base64);
               setImageReadyTime(Date.now());
+              // สร้าง Blob URL จาก base64
+              createBlobUrlFromBase64(result.base64);
             } else {
               console.error("❌ Image generation failed:", result.error);
               if (!isCancelled && lastDateInfoKeyRef.current === dateInfoKey) {
@@ -108,7 +135,7 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
       setError("ข้อมูลวันเกิดไม่ครบถ้วน");
       setIsLoading(false);
     }
-  }, [propGeneratedImage, dateInfo]); // ลบ generatedImage และ error ออกจาก dependency เพื่อป้องกันการ trigger ซ้ำ
+  }, [propGeneratedImage, dateInfo, createBlobUrlFromBase64]); // เพิ่ม createBlobUrlFromBase64 ใน dependency
 
   // จัดการ loading state โดยคำนึงถึง minimum loading time (นับจาก component mount)
   useEffect(() => {
@@ -133,55 +160,33 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
     }
   }, [generatedImage, imageReadyTime, error, componentMountTime]);
 
+  // ทำความสะอาด Blob URL เมื่อ component unmount
+  useEffect(() => {
+    return () => {
+      if (imageBlobUrl) {
+        URL.revokeObjectURL(imageBlobUrl);
+        console.log('🧹 Cleaned up Blob URL');
+      }
+    };
+  }, [imageBlobUrl]);
+
   const handleDownload = async () => {
-    if (isLoading || !generatedImage) return;
+    if (isLoading || !generatedImage || !imageBlobUrl) return;
 
     try {
-      // แปลง base64 เป็น blob
-      const response = await fetch(generatedImage);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
       const fileName = `วอลเปเปอร์มงคลเสริมดวง_${Date.now()}.png`;
 
-      // ตรวจสอบว่าเป็น mobile หรือ LINE app
-      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      const isLineApp = isLiffReady() && isInLine();
-
-      // สำหรับ mobile และ LINE: ใช้ Web Share API เพื่อให้ผู้ใช้เลือกบันทึก
-      if ((isMobile || isLineApp) && navigator.share) {
-        try {
-          const file = new File([blob], fileName, {
-            type: 'image/png',
-            lastModified: Date.now()
-          });
-
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              title: 'บันทึกวอลเปเปอร์มงคลเสริมดวง',
-              text: 'บันทึกวอลเปเปอร์มงคลเสริมดวง',
-              files: [file],
-            });
-            console.log('✅ Wallpaper download initiated via share menu');
-            URL.revokeObjectURL(blobUrl); // ทำความสะอาด
-            return;
-          }
-        } catch (shareError) {
-          console.log('⚠️ Web Share API failed, using fallback download:', shareError);
-        }
-      }
-
-      // สำหรับ desktop หรือ fallback: ใช้ download attribute
+      // ใช้ Blob URL ที่สร้างไว้แล้วสำหรับดาวน์โหลด
       const link = document.createElement('a');
-      link.href = blobUrl;
+      link.href = imageBlobUrl;
       link.download = fileName;
       link.style.display = 'none';
       document.body.appendChild(link);
       link.click();
 
-      // รอสักครู่แล้วลบ link และ revoke blob URL
+      // รอสักครู่แล้วลบ link (ไม่ต้อง revoke blob URL เพราะจะใช้ต่อสำหรับแชร์)
       setTimeout(() => {
         document.body.removeChild(link);
-        URL.revokeObjectURL(blobUrl);
       }, 100);
 
       console.log('✅ Wallpaper downloaded successfully');
@@ -192,11 +197,11 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
   };
 
   const handleShare = async () => {
-    if (isLoading || !generatedImage) return;
+    if (isLoading || !generatedImage || !imageBlobUrl) return;
 
     try {
-      // แปลง base64 เป็น blob และ File object
-      const response = await fetch(generatedImage);
+      // ใช้ Blob URL ที่สร้างไว้แล้ว แปลงเป็น File object
+      const response = await fetch(imageBlobUrl);
       const blob = await response.blob();
       const file = new File([blob], `วอลเปเปอร์มงคลเสริมดวง_${Date.now()}.png`, {
         type: 'image/png',
@@ -216,7 +221,7 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
               text: 'รับวอลเปเปอร์มงคลเสริมดวง',
               files: [file],
             });
-            console.log('✅ Wallpaper shared successfully');
+            console.log('✅ Wallpaper shared successfully via Web Share API');
             return;
           }
         } catch (shareError) {
