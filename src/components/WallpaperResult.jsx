@@ -160,6 +160,7 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
     }
   }, [generatedImage, imageReadyTime, error, componentMountTime]);
 
+
   // ทำความสะอาด Blob URL เมื่อ component unmount
   useEffect(() => {
     return () => {

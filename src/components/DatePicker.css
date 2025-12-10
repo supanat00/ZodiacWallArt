@@ -291,6 +291,54 @@
   transform: none;
 }
 
+/* Test Buttons */
+.test-buttons-container {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  justify-content: center;
+  align-items: center;
+}
+
+.test-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background-color: rgba(196, 143, 62, 0.8);
+  color: white;
+  border: 2px solid #c48f3e;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.2s, box-shadow 0.3s;
+  box-shadow: 0 2px 4px rgba(196, 143, 62, 0.3);
+  min-height: 44px;
+  touch-action: manipulation;
+  box-sizing: border-box;
+}
+
+.test-button:hover:not(:disabled) {
+  background-color: rgba(196, 143, 62, 1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(196, 143, 62, 0.4);
+}
+
+.test-button:active:not(:disabled) {
+  transform: translateY(0);
+  background-color: rgba(157, 113, 38, 1);
+  box-shadow: 0 2px 4px rgba(196, 143, 62, 0.3);
+}
+
+.test-button svg {
+  flex-shrink: 0;
+}
+
+.test-button span {
+  white-space: nowrap;
+}
+
 /* Mobile responsive */
 @media (max-width: 480px) {
   .date-picker-container {
