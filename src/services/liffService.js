@@ -3,7 +3,6 @@
  * จัดการการ initialize และใช้งาน LINE LIFF SDK
  */
 
-/* eslint-disable no-undef */
 // LIFF SDK จะถูกโหลดจาก script tag ใน index.html และจะอยู่ใน window.liff
 // ใช้ window.liff แทน liff โดยตรงเพื่อหลีกเลี่ยง linter error
 
@@ -220,6 +219,47 @@ export const shareUrlToLine = async (url) => {
     }
   } catch (error) {
     console.error("❌ Error sharing URL to LINE:", error);
+    return false;
+  }
+};
+
+/**
+ * Share image file ไปยัง LINE
+ * @param {File} file - File object ของภาพ
+ * @returns {Promise<boolean>} - true ถ้าสำเร็จ
+ */
+export const shareImageToLine = async (file) => {
+  if (!isLiffReady() || !isInLine()) {
+    console.warn("⚠️ Cannot share image: not in LINE app");
+    return false;
+  }
+
+  try {
+    // LINE LIFF รองรับการแชร์ไฟล์ผ่าน shareTargetPicker
+    if (liffInstance.isApiAvailable("shareTargetPicker")) {
+      // แปลง File เป็น base64 หรือใช้ Web Share API
+      // เนื่องจาก LINE LIFF อาจไม่รองรับ File object โดยตรง
+      // ให้ใช้ Web Share API แทน (LINE browser รองรับ)
+      if (
+        navigator.share &&
+        navigator.canShare &&
+        navigator.canShare({ files: [file] })
+      ) {
+        await navigator.share({
+          title: "วอลเปเปอร์มงคลเสริมดวง",
+          text: "รับวอลเปเปอร์มงคลเสริมดวง",
+          files: [file],
+        });
+        console.log("✅ Image shared to LINE via Web Share API");
+        return true;
+      }
+    }
+
+    // Fallback: แปลงเป็น base64 และส่งเป็นข้อความ (ไม่แนะนำเพราะไฟล์ใหญ่)
+    console.warn("⚠️ LINE shareTargetPicker not available, using fallback");
+    return false;
+  } catch (error) {
+    console.error("❌ Error sharing image to LINE:", error);
     return false;
   }
 };

@@ -4,7 +4,7 @@ import mockupBg from '../assets/mockup_bg.png';
 import mockupWallpaper01 from '../assets/mockup_wallpaper_01.png';
 import mockupWallpaper02 from '../assets/mockup_wallpaper_02.png';
 import { generateWallpaperImage } from '../services/imageGenerationApi';
-import { isLiffReady, isInLine, shareUrlToLine } from '../services/liffService';
+import { isLiffReady, isInLine, shareImageToLine } from '../services/liffService';
 
 function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGeneratedImage, onPlayAgain }) {
   const [isLoading, setIsLoading] = useState(true);
@@ -137,17 +137,35 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
     if (isLoading || !generatedImage) return;
 
     try {
+      // แปลง base64 เป็น blob และ File object
+      const response = await fetch(generatedImage);
+      const blob = await response.blob();
+      const file = new File([blob], `วอลเปเปอร์มงคลเสริมดวง_${Date.now()}.png`, {
+        type: 'image/png',
+        lastModified: Date.now()
+      });
+
+      // ตรวจสอบว่าเปิดใน LINE app หรือไม่
+      if (isLiffReady() && isInLine()) {
+        // ถ้าเปิดใน LINE app ให้ใช้ Web Share API (LINE รองรับ)
+        try {
+          if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: 'วอลเปเปอร์มงคลเสริมดวง',
+              text: 'บันทึกวอลเปเปอร์มงคลเสริมดวง',
+              files: [file],
+            });
+            console.log('✅ Wallpaper saved via LINE share');
+            return;
+          }
+        } catch (shareError) {
+          console.log('⚠️ LINE share failed, using fallback:', shareError);
+        }
+      }
+
       // สำหรับ mobile: ใช้ Web Share API เพื่อให้ผู้ใช้เลือกบันทึกที่แกลอรี่
       if (navigator.share && /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
         try {
-          // แปลง base64 เป็น blob
-          const response = await fetch(generatedImage);
-          const blob = await response.blob();
-          const file = new File([blob], `wallpaper-mongkol-${Date.now()}.png`, {
-            type: 'image/png',
-            lastModified: Date.now()
-          });
-
           // ตรวจสอบว่า browser รองรับ file sharing หรือไม่
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({
@@ -165,10 +183,9 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
       }
 
       // Fallback: ใช้วิธีปกติสำหรับ desktop หรือเมื่อ Web Share API ไม่ทำงาน
-      // สำหรับ mobile browser บางตัว การใช้ download attribute อาจบันทึกไปที่แกลอรี่ได้
       const link = document.createElement('a');
       link.href = generatedImage;
-      link.download = `วอลเปเปอร์มงคลเสริมดวง_${Date.now()}.png`; // ใช้ชื่อภาษาไทยเพื่อให้ mobile บันทึกไปที่แกลอรี่
+      link.download = `วอลเปเปอร์มงคลเสริมดวง_${Date.now()}.png`;
       link.style.display = 'none';
       document.body.appendChild(link);
       link.click();
@@ -189,16 +206,18 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
     if (isLoading || !generatedImage) return;
 
     try {
+      // แปลง base64 เป็น blob และ File object
+      const response = await fetch(generatedImage);
+      const blob = await response.blob();
+      const file = new File([blob], `วอลเปเปอร์มงคลเสริมดวง_${Date.now()}.png`, {
+        type: 'image/png',
+        lastModified: Date.now()
+      });
+
       // ตรวจสอบว่าเปิดใน LINE app หรือไม่
       if (isLiffReady() && isInLine()) {
-        // ถ้าเปิดใน LINE app ให้ใช้ LINE share
+        // ถ้าเปิดใน LINE app ให้ใช้ Web Share API (LINE รองรับ)
         try {
-          // แปลง base64 เป็น blob
-          const response = await fetch(generatedImage);
-          const blob = await response.blob();
-          const file = new File([blob], `wallpaper-mongkol-${Date.now()}.png`, { type: 'image/png' });
-
-          // ใช้ Web Share API (LINE รองรับ)
           if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({
               title: 'วอลเปเปอร์มงคลเสริมดวง',
@@ -216,11 +235,6 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
       // สำหรับ mobile: ใช้ Web Share API เพื่อให้ผู้ใช้เลือกบันทึกที่แกลอรี่
       if (navigator.share && /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
         try {
-          // แปลง base64 เป็น blob
-          const response = await fetch(generatedImage);
-          const blob = await response.blob();
-          const file = new File([blob], `wallpaper-mongkol-${Date.now()}.png`, { type: 'image/png' });
-
           // ตรวจสอบว่า browser รองรับ file sharing หรือไม่
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({
