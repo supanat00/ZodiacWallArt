@@ -137,62 +137,51 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
     if (isLoading || !generatedImage) return;
 
     try {
-      // แปลง base64 เป็น blob และ File object
+      // แปลง base64 เป็น blob
       const response = await fetch(generatedImage);
       const blob = await response.blob();
-      const file = new File([blob], `วอลเปเปอร์มงคลเสริมดวง_${Date.now()}.png`, {
-        type: 'image/png',
-        lastModified: Date.now()
-      });
+      const blobUrl = URL.createObjectURL(blob);
+      const fileName = `วอลเปเปอร์มงคลเสริมดวง_${Date.now()}.png`;
 
-      // ตรวจสอบว่าเปิดใน LINE app หรือไม่
-      if (isLiffReady() && isInLine()) {
-        // ถ้าเปิดใน LINE app ให้ใช้ Web Share API (LINE รองรับ)
-        try {
-          if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              title: 'วอลเปเปอร์มงคลเสริมดวง',
-              text: 'บันทึกวอลเปเปอร์มงคลเสริมดวง',
-              files: [file],
-            });
-            console.log('✅ Wallpaper saved via LINE share');
-            return;
-          }
-        } catch (shareError) {
-          console.log('⚠️ LINE share failed, using fallback:', shareError);
-        }
-      }
+      // ตรวจสอบว่าเป็น mobile หรือ LINE app
+      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isLineApp = isLiffReady() && isInLine();
 
-      // สำหรับ mobile: ใช้ Web Share API เพื่อให้ผู้ใช้เลือกบันทึกที่แกลอรี่
-      if (navigator.share && /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+      // สำหรับ mobile และ LINE: ใช้ Web Share API เพื่อให้ผู้ใช้เลือกบันทึก
+      if ((isMobile || isLineApp) && navigator.share) {
         try {
-          // ตรวจสอบว่า browser รองรับ file sharing หรือไม่
+          const file = new File([blob], fileName, {
+            type: 'image/png',
+            lastModified: Date.now()
+          });
+
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({
-              title: 'วอลเปเปอร์มงคลเสริมดวง',
+              title: 'บันทึกวอลเปเปอร์มงคลเสริมดวง',
               text: 'บันทึกวอลเปเปอร์มงคลเสริมดวง',
               files: [file],
             });
-            console.log('✅ Wallpaper shared/saved to gallery successfully');
+            console.log('✅ Wallpaper download initiated via share menu');
+            URL.revokeObjectURL(blobUrl); // ทำความสะอาด
             return;
           }
         } catch (shareError) {
-          // ถ้า Web Share API ไม่ทำงาน ให้ fallback ไปใช้วิธีปกติ
-          console.log('⚠️ Web Share API failed, using fallback download method:', shareError);
+          console.log('⚠️ Web Share API failed, using fallback download:', shareError);
         }
       }
 
-      // Fallback: ใช้วิธีปกติสำหรับ desktop หรือเมื่อ Web Share API ไม่ทำงาน
+      // สำหรับ desktop หรือ fallback: ใช้ download attribute
       const link = document.createElement('a');
-      link.href = generatedImage;
-      link.download = `วอลเปเปอร์มงคลเสริมดวง_${Date.now()}.png`;
+      link.href = blobUrl;
+      link.download = fileName;
       link.style.display = 'none';
       document.body.appendChild(link);
       link.click();
 
-      // รอสักครู่แล้วลบ link
+      // รอสักครู่แล้วลบ link และ revoke blob URL
       setTimeout(() => {
         document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
       }, 100);
 
       console.log('✅ Wallpaper downloaded successfully');
@@ -214,28 +203,13 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
         lastModified: Date.now()
       });
 
-      // ตรวจสอบว่าเปิดใน LINE app หรือไม่
-      if (isLiffReady() && isInLine()) {
-        // ถ้าเปิดใน LINE app ให้ใช้ Web Share API (LINE รองรับ)
-        try {
-          if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              title: 'วอลเปเปอร์มงคลเสริมดวง',
-              text: 'รับวอลเปเปอร์มงคลเสริมดวง',
-              files: [file],
-            });
-            console.log('✅ Wallpaper shared via LINE');
-            return;
-          }
-        } catch (shareError) {
-          console.log('⚠️ LINE share failed, using fallback:', shareError);
-        }
-      }
+      // ตรวจสอบว่าเป็น mobile หรือ LINE app
+      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isLineApp = isLiffReady() && isInLine();
 
-      // สำหรับ mobile: ใช้ Web Share API เพื่อให้ผู้ใช้เลือกบันทึกที่แกลอรี่
-      if (navigator.share && /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+      // ใช้ Web Share API สำหรับ mobile และ LINE
+      if ((isMobile || isLineApp) && navigator.share) {
         try {
-          // ตรวจสอบว่า browser รองรับ file sharing หรือไม่
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({
               title: 'วอลเปเปอร์มงคลเสริมดวง',
@@ -246,13 +220,24 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
             return;
           }
         } catch (shareError) {
-          console.log('⚠️ Web Share API failed, using fallback:', shareError);
+          // ถ้าไม่รองรับ file sharing ให้แชร์ URL แทน
+          console.log('⚠️ File share not supported, trying URL share:', shareError);
+          try {
+            await navigator.share({
+              title: 'วอลเปเปอร์มงคลเสริมดวง',
+              text: 'รับวอลเปเปอร์มงคลเสริมดวง',
+              url: window.location.href,
+            });
+            console.log('✅ Wallpaper URL shared successfully');
+            return;
+          } catch (urlShareError) {
+            console.log('⚠️ URL share also failed:', urlShareError);
+          }
         }
       }
 
-      // Fallback: แชร์ URL หรือคัดลอกไปยัง clipboard
+      // สำหรับ desktop หรือ fallback: แชร์ URL
       if (navigator.share) {
-        // ถ้าไม่รองรับ file sharing ให้แชร์ URL แทน
         await navigator.share({
           title: 'วอลเปเปอร์มงคลเสริมดวง',
           text: 'รับวอลเปเปอร์มงคลเสริมดวง',
@@ -260,19 +245,25 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
         });
         console.log('✅ Wallpaper URL shared successfully');
       } else {
-        // Fallback: คัดลอก base64 ไปยัง clipboard
-        await navigator.clipboard.writeText(generatedImage);
-        alert('คัดลอกภาพไปยังคลิปบอร์ดแล้ว');
-        console.log('✅ Wallpaper copied to clipboard');
+        // Fallback: คัดลอก URL ไปยัง clipboard
+        try {
+          await navigator.clipboard.writeText(window.location.href);
+          alert('คัดลอกลิงก์ไปยังคลิปบอร์ดแล้ว');
+          console.log('✅ URL copied to clipboard');
+        } catch (clipboardError) {
+          console.error('❌ Error copying to clipboard:', clipboardError);
+          alert('ไม่สามารถแชร์ได้ กรุณาลองใหม่อีกครั้ง');
+        }
       }
     } catch (error) {
       console.error('❌ Error sharing wallpaper:', error);
-      // Fallback: คัดลอก base64 ไปยัง clipboard
+      // Fallback: คัดลอก URL ไปยัง clipboard
       try {
-        await navigator.clipboard.writeText(generatedImage);
-        alert('คัดลอกภาพไปยังคลิปบอร์ดแล้ว');
+        await navigator.clipboard.writeText(window.location.href);
+        alert('คัดลอกลิงก์ไปยังคลิปบอร์ดแล้ว');
       } catch (clipboardError) {
         console.error('❌ Error copying to clipboard:', clipboardError);
+        alert('ไม่สามารถแชร์ได้ กรุณาลองใหม่อีกครั้ง');
       }
     }
   };
