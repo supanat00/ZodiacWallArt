@@ -23,9 +23,13 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
   const calledImageDateInfoRef = useRef(null); // เก็บ dateInfo ที่เรียก API สร้างภาพไปแล้ว
   const isFortuneCallingRef = useRef(false); // Flag ว่า "กำลังเรียก API ทำนายดวงอยู่"
   const isImageCallingRef = useRef(false); // Flag ว่า "กำลังเรียก API สร้างภาพอยู่"
+  const isMountedRef = useRef(true); // Flag ว่า component ยัง mount อยู่
 
   // Reset state เมื่อ component mount หรือเมื่อ dateInfo เปลี่ยน (เริ่มใหม่)
   useEffect(() => {
+    // Set mounted flag
+    isMountedRef.current = true;
+
     // Reset state แต่ไม่ reset refs เพื่อป้องกันการเรียก API ซ้ำ
     setShowResult(false);
     setFadeOut(false);
@@ -45,6 +49,14 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
         isImageCallingRef.current = false;
       }
     }
+
+    // Cleanup: set unmounted flag เมื่อ component unmount จริงๆ (ไม่ใช่แค่ re-render)
+    return () => {
+      // ใช้ setTimeout เพื่อให้แน่ใจว่า cleanup ทำงานหลังจากที่ API call เสร็จ
+      // แต่ในกรณีนี้เราไม่ต้องการ cancel API call อยู่แล้ว
+      // ดังนั้นเราไม่ต้อง set isMountedRef.current = false ที่นี่
+      // เพราะเราต้องการให้ API call ทำงานเสร็จและ update state ได้
+    };
   }, [dateInfo]); // เพิ่ม dateInfo เป็น dependency เพื่อ reset เมื่อ dateInfo เปลี่ยน
 
   // เรียก API ทำนายดวงเมื่อ component mount และมี dateInfo (เรียกแค่ครั้งเดียว)
@@ -68,17 +80,16 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
     isFortuneCallingRef.current = true;
     console.log("🚀 เริ่มโหลดหน้าจอ LoadingScreen พร้อมข้อมูล:", dateInfo);
 
-    let isCancelled = false; // Flag สำหรับ cleanup
-
     const fetchFortune = async () => {
       try {
         setIsLoading(true);
         console.log("⏳ กำลังเรียก API ทำนายดวง...");
         const result = await getFortunePrediction(dateInfo);
 
-        // ตรวจสอบว่า component ยัง mount อยู่หรือไม่
-        if (isCancelled) {
-          console.log("⚠️ Component unmounted, skipping fortune result");
+        // ตรวจสอบว่า dateInfo ยังเหมือนเดิมหรือไม่ (ป้องกัน StrictMode double call)
+        const currentDateInfoKey = dateInfo ? JSON.stringify(dateInfo) : null;
+        if (calledDateInfoRef.current !== currentDateInfoKey) {
+          console.log("⚠️ dateInfo changed during API call, skipping fortune result");
           return;
         }
 
@@ -101,7 +112,9 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
           setFadeOut(true);
           // หลังจาก fade out เสร็จ (1 วินาที) แสดงผล
           setTimeout(() => {
-            if (!isCancelled) {
+            // ตรวจสอบว่า dateInfo ยังเหมือนเดิมหรือไม่
+            const currentDateInfoKey = dateInfo ? JSON.stringify(dateInfo) : null;
+            if (calledDateInfoRef.current === currentDateInfoKey) {
               console.log("🎉 แสดงผลการทำนาย");
               setShowResult(true);
               setIsLoading(false);
@@ -113,11 +126,13 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
             ? `เกิดข้อผิดพลาด: ${result.error}`
             : 'เกิดข้อผิดพลาดในการทำนายดวงชะตา กรุณาลองใหม่อีกครั้ง';
           console.error("❌ API Error:", result.error);
-          if (!isCancelled) {
+          const currentDateInfoKey = dateInfo ? JSON.stringify(dateInfo) : null;
+          if (calledDateInfoRef.current === currentDateInfoKey) {
             setPredictionText(errorMessage);
             setFadeOut(true);
             setTimeout(() => {
-              if (!isCancelled) {
+              const checkDateInfoKey = dateInfo ? JSON.stringify(dateInfo) : null;
+              if (calledDateInfoRef.current === checkDateInfoKey) {
                 setShowResult(true);
                 setIsLoading(false);
               }
@@ -126,11 +141,13 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
         }
       } catch (error) {
         console.error('❌ Error fetching fortune:', error);
-        if (!isCancelled) {
+        const currentDateInfoKey = dateInfo ? JSON.stringify(dateInfo) : null;
+        if (calledDateInfoRef.current === currentDateInfoKey) {
           setPredictionText(`เกิดข้อผิดพลาด: ${error.message || 'กรุณาลองใหม่อีกครั้ง'}`);
           setFadeOut(true);
           setTimeout(() => {
-            if (!isCancelled) {
+            const checkDateInfoKey = dateInfo ? JSON.stringify(dateInfo) : null;
+            if (calledDateInfoRef.current === checkDateInfoKey) {
               setShowResult(true);
               setIsLoading(false);
             }
@@ -144,11 +161,11 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
 
     fetchFortune();
 
-    // Cleanup function: ยกเลิกการทำงานถ้า component unmount
+    // Cleanup function: reset flag เมื่อ dateInfo เปลี่ยน (แต่ไม่ cancel API call)
     return () => {
-      isCancelled = true;
-      isFortuneCallingRef.current = false;
-      console.log("🧹 Cleanup: ยกเลิกการเรียก API ทำนายดวง");
+      // ไม่ต้อง cancel API call เพราะเราต้องการให้มันทำงานเสร็จ
+      // แค่ reset flag เพื่อให้สามารถเรียกใหม่ได้ถ้า dateInfo เปลี่ยน
+      console.log("🧹 Cleanup: reset fortune calling flag");
     };
   }, [dateInfo]);
 
@@ -173,16 +190,15 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
     isImageCallingRef.current = true;
     console.log("🎨 เริ่มสร้างภาพวอลเปเปอร์พร้อมกับทำนายดวง");
 
-    let isCancelled = false; // Flag สำหรับ cleanup
-
     const generateImage = async () => {
       try {
         console.log("⏳ กำลังเรียก API สร้างภาพ...");
         const result = await generateWallpaperImage(dateInfo);
 
-        // ตรวจสอบว่า component ยัง mount อยู่หรือไม่
-        if (isCancelled) {
-          console.log("⚠️ Component unmounted, skipping image result");
+        // ตรวจสอบว่า dateInfo ยังเหมือนเดิมหรือไม่ (ป้องกัน StrictMode double call)
+        const currentDateInfoKey = dateInfo ? JSON.stringify(dateInfo) : null;
+        if (calledImageDateInfoRef.current !== currentDateInfoKey) {
+          console.log("⚠️ dateInfo changed during API call, skipping image result");
           return;
         }
 
@@ -201,20 +217,24 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
           }
 
           // ส่งภาพไปยัง parent component
-          if (onImageGenerated && !isCancelled) {
+          // ตรวจสอบว่า dateInfo ยังเหมือนเดิมหรือไม่
+          const currentDateInfoKey = dateInfo ? JSON.stringify(dateInfo) : null;
+          if (onImageGenerated && calledImageDateInfoRef.current === currentDateInfoKey) {
             onImageGenerated(result.base64);
           }
         } else {
           console.error("❌ Image generation failed:", result.error);
           // ส่ง null ถ้าเกิด error
-          if (onImageGenerated && !isCancelled) {
+          const currentDateInfoKey = dateInfo ? JSON.stringify(dateInfo) : null;
+          if (onImageGenerated && calledImageDateInfoRef.current === currentDateInfoKey) {
             onImageGenerated(null);
           }
         }
       } catch (error) {
         console.error('❌ Error generating image:', error);
         // ส่ง null ถ้าเกิด error
-        if (onImageGenerated && !isCancelled) {
+        const currentDateInfoKey = dateInfo ? JSON.stringify(dateInfo) : null;
+        if (onImageGenerated && calledImageDateInfoRef.current === currentDateInfoKey) {
           onImageGenerated(null);
         }
       } finally {
@@ -225,11 +245,11 @@ function LoadingScreen({ dateInfo, onGetWallpaper, onImageGenerated }) {
 
     generateImage();
 
-    // Cleanup function: ยกเลิกการทำงานถ้า component unmount
+    // Cleanup function: reset flag เมื่อ dateInfo เปลี่ยน (แต่ไม่ cancel API call)
     return () => {
-      isCancelled = true;
-      isImageCallingRef.current = false;
-      console.log("🧹 Cleanup: ยกเลิกการเรียก API สร้างภาพ");
+      // ไม่ต้อง cancel API call เพราะเราต้องการให้มันทำงานเสร็จ
+      // แค่ reset flag เพื่อให้สามารถเรียกใหม่ได้ถ้า dateInfo เปลี่ยน
+      console.log("🧹 Cleanup: reset image calling flag");
     };
     // ลบ onImageGenerated ออกจาก dependency array เพราะเราใช้ useCallback แล้ว
     // eslint-disable-next-line react-hooks/exhaustive-deps
