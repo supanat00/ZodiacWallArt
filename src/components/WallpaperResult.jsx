@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import './WallpaperResult.css';
 import mockupBg from '../assets/mockup_bg.png';
 import mockupWallpaper01 from '../assets/mockup_wallpaper_01.png';
 import mockupWallpaper02 from '../assets/mockup_wallpaper_02.png';
 import { generateWallpaperImage } from '../services/imageGenerationApi';
-import { isLiffReady, isInLine, shareImageToLine } from '../services/liffService';
+import { isLiffReady, isInLine } from '../services/liffService';
 import { uploadImageToCloudinary } from '../services/cloudinaryService';
 
 function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGeneratedImage, onPlayAgain }) {
@@ -16,17 +16,18 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
   const [isUploading, setIsUploading] = useState(false); // สถานะการอัปโหลด
   const [error, setError] = useState(null);
   const [imageReadyTime, setImageReadyTime] = useState(null); // เวลาที่ภาพพร้อม
-  const [componentMountTime] = useState(Date.now()); // เวลาที่ component mount
+  const [componentMountTime] = useState(() => Date.now()); // เวลาที่ component mount
   const minimumLoadingTime = 4000; // อย่างน้อย 4 วินาที (4000ms)
   const hasCalledFallbackRef = useRef(false); // ป้องกันการเรียก fallback API ซ้ำ
   const lastDateInfoKeyRef = useRef(null); // เก็บ dateInfo key ล่าสุดที่เรียก API
   const hasUploadedRef = useRef(false); // ป้องกันการอัปโหลดซ้ำ
 
-  // สุ่มเลือก mockup wallpaper สำหรับแสดงตอน loading
-  const selectedMockupWallpaper = useMemo(() => {
+  // สุ่มเลือก mockup wallpaper สำหรับแสดงตอน loading (ใช้ state เพื่อหลีกเลี่ยง impure function)
+  const [selectedMockupWallpaper] = useState(() => {
     const mockups = [mockupWallpaper01, mockupWallpaper02];
-    return mockups[Math.floor(Math.random() * mockups.length)];
-  }, []);
+    const index = Math.floor(Math.random() * mockups.length);
+    return mockups[index];
+  });
 
   useEffect(() => {
     // Animated dots
@@ -205,19 +206,46 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
     };
   }, [imageBlobUrl]);
 
-  // ตรวจสอบว่าเปิดใน LINE LIFF หรือไม่
-  const isInLineApp = isLiffReady() && isInLine();
-
-  // Handler สำหรับปุ่ม download (สำหรับ browser ปกติ)
-  const handleDownload = async () => {
-    if (isLoading || !generatedImage || !imageBlobUrl) return;
+  // Handler สำหรับปุ่ม download (สำหรับ browser ปกติ) - ใช้ liff.openWindow ถ้าอยู่ใน LINE
+  const _handleDownload = async () => {
+    if (isLoading || !generatedImage) return;
 
     try {
-      const fileName = `วอลเปเปอร์มงคลเสริมดวง_${Date.now()}.png`;
+      // ใช้ Cloudinary URL ถ้ามี (แนะนำ) หรือ fallback เป็น blob URL
+      const imageUrl = cloudinaryUrl || imageBlobUrl;
 
-      // ใช้ Blob URL ที่สร้างไว้แล้วสำหรับดาวน์โหลด
+      if (!imageUrl) {
+        console.warn('⚠️ No image URL available');
+        alert('ยังไม่มีลิงก์ภาพ กรุณารอสักครู่...');
+        return;
+      }
+
+      // ถ้ายังไม่มี Cloudinary URL และกำลังอัปโหลดอยู่
+      if (!cloudinaryUrl && isUploading) {
+        alert('กำลังอัปโหลดภาพ กรุณารอสักครู่แล้วลองอีกครั้ง');
+        return;
+      }
+
+      // ตรวจสอบว่า LIFF พร้อมหรือไม่
+      if (isLiffReady() && isInLine()) {
+        // ใช้ LIFF openWindow สำหรับเปิด external browser
+        const liffInstance = window.liff;
+        if (liffInstance && liffInstance.openWindow) {
+          await liffInstance.openWindow({
+            url: imageUrl,
+            external: true,
+          });
+          console.log('✅ Opening external browser with image URL via liff.openWindow');
+          return;
+        } else {
+          console.warn('⚠️ liff.openWindow is not available');
+        }
+      }
+
+      // Fallback: ใช้วิธีเดิมสำหรับ browser ปกติ
+      const fileName = `วอลเปเปอร์มงคลเสริมดวง_${Date.now()}.png`;
       const link = document.createElement('a');
-      link.href = imageBlobUrl;
+      link.href = imageBlobUrl || imageUrl;
       link.download = fileName;
       link.style.display = 'none';
       document.body.appendChild(link);
@@ -235,75 +263,104 @@ function WallpaperResult({ wallpaperUrl, dateInfo, generatedImage: propGenerated
     }
   };
 
-  // Handler สำหรับปุ่ม share (สำหรับ browser ปกติ)
-  const handleShare = async () => {
-    if (isLoading || !generatedImage || !imageBlobUrl) return;
+  // Handler สำหรับปุ่ม share (สำหรับ browser ปกติ) - ใช้ liff.openWindow ถ้าอยู่ใน LINE
+  const _handleShare = async () => {
+    if (isLoading || !generatedImage) return;
 
     try {
-      // ใช้ Blob URL ที่สร้างไว้แล้ว แปลงเป็น File object
-      const response = await fetch(imageBlobUrl);
-      const blob = await response.blob();
-      const file = new File([blob], `วอลเปเปอร์มงคลเสริมดวง_${Date.now()}.png`, {
-        type: 'image/png',
-        lastModified: Date.now()
-      });
+      // ใช้ Cloudinary URL ถ้ามี (แนะนำ) หรือ fallback เป็น blob URL
+      const imageUrl = cloudinaryUrl || imageBlobUrl;
 
-      // ตรวจสอบว่าเป็น mobile หรือไม่
-      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (!imageUrl) {
+        console.warn('⚠️ No image URL available');
+        alert('ยังไม่มีลิงก์ภาพ กรุณารอสักครู่...');
+        return;
+      }
 
-      // ใช้ Web Share API สำหรับ mobile
-      if (isMobile && navigator.share) {
-        try {
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              title: 'วอลเปเปอร์มงคลเสริมดวง',
-              text: 'รับวอลเปเปอร์มงคลเสริมดวง',
-              files: [file],
-            });
-            console.log('✅ Wallpaper shared successfully via Web Share API');
-            return;
-          }
-        } catch (shareError) {
-          // ถ้าไม่รองรับ file sharing ให้แชร์ URL แทน
-          console.log('⚠️ File share not supported, trying URL share:', shareError);
-          try {
-            await navigator.share({
-              title: 'วอลเปเปอร์มงคลเสริมดวง',
-              text: 'รับวอลเปเปอร์มงคลเสริมดวง',
-              url: window.location.href,
-            });
-            console.log('✅ Wallpaper URL shared successfully');
-            return;
-          } catch (urlShareError) {
-            console.log('⚠️ URL share also failed:', urlShareError);
-          }
+      // ถ้ายังไม่มี Cloudinary URL และกำลังอัปโหลดอยู่
+      if (!cloudinaryUrl && isUploading) {
+        alert('กำลังอัปโหลดภาพ กรุณารอสักครู่แล้วลองอีกครั้ง');
+        return;
+      }
+
+      // ตรวจสอบว่า LIFF พร้อมหรือไม่
+      if (isLiffReady() && isInLine()) {
+        // ใช้ LIFF openWindow สำหรับเปิด external browser
+        const liffInstance = window.liff;
+        if (liffInstance && liffInstance.openWindow) {
+          await liffInstance.openWindow({
+            url: imageUrl,
+            external: true,
+          });
+          console.log('✅ Opening external browser with image URL via liff.openWindow');
+          return;
+        } else {
+          console.warn('⚠️ liff.openWindow is not available');
         }
       }
 
-      // สำหรับ desktop หรือ fallback: แชร์ URL
-      if (navigator.share) {
-        await navigator.share({
-          title: 'วอลเปเปอร์มงคลเสริมดวง',
-          text: 'รับวอลเปเปอร์มงคลเสริมดวง',
-          url: window.location.href,
-        });
-        console.log('✅ Wallpaper URL shared successfully');
-      } else {
-        // Fallback: คัดลอก URL ไปยัง clipboard
+      // Fallback: ใช้ Web Share API สำหรับ browser ปกติ
+      // ใช้ Blob URL ที่สร้างไว้แล้ว แปลงเป็น File object
+      if (imageBlobUrl) {
         try {
-          await navigator.clipboard.writeText(window.location.href);
-          alert('คัดลอกลิงก์ไปยังคลิปบอร์ดแล้ว');
-          console.log('✅ URL copied to clipboard');
-        } catch (clipboardError) {
-          console.error('❌ Error copying to clipboard:', clipboardError);
-          alert('ไม่สามารถแชร์ได้ กรุณาลองใหม่อีกครั้ง');
+          const response = await fetch(imageBlobUrl);
+          const blob = await response.blob();
+          const file = new File([blob], `วอลเปเปอร์มงคลเสริมดวง_${Date.now()}.png`, {
+            type: 'image/png',
+            lastModified: Date.now()
+          });
+
+          // ตรวจสอบว่าเป็น mobile หรือไม่
+          const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+          // ใช้ Web Share API สำหรับ mobile
+          if (isMobile && navigator.share) {
+            try {
+              if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                  title: 'วอลเปเปอร์มงคลเสริมดวง',
+                  text: 'รับวอลเปเปอร์มงคลเสริมดวง',
+                  files: [file],
+                });
+                console.log('✅ Wallpaper shared successfully via Web Share API');
+                return;
+              }
+            } catch (shareError) {
+              // ถ้าไม่รองรับ file sharing ให้แชร์ URL แทน
+              console.log('⚠️ File share not supported, trying URL share:', shareError);
+            }
+          }
+
+          // สำหรับ desktop หรือ fallback: แชร์ URL
+          if (navigator.share) {
+            await navigator.share({
+              title: 'วอลเปเปอร์มงคลเสริมดวง',
+              text: 'รับวอลเปเปอร์มงคลเสริมดวง',
+              url: imageUrl || window.location.href,
+            });
+            console.log('✅ Wallpaper URL shared successfully');
+            return;
+          }
+        } catch (shareError) {
+          console.log('⚠️ Share error:', shareError);
         }
+      }
+
+      // Fallback: คัดลอก URL ไปยัง clipboard
+      try {
+        await navigator.clipboard.writeText(imageUrl || window.location.href);
+        alert('คัดลอกลิงก์ไปยังคลิปบอร์ดแล้ว');
+        console.log('✅ URL copied to clipboard');
+      } catch (clipboardError) {
+        console.error('❌ Error copying to clipboard:', clipboardError);
+        alert('ไม่สามารถแชร์ได้ กรุณาลองใหม่อีกครั้ง');
       }
     } catch (error) {
       console.error('❌ Error sharing wallpaper:', error);
       // Fallback: คัดลอก URL ไปยัง clipboard
       try {
-        await navigator.clipboard.writeText(window.location.href);
+        const imageUrl = cloudinaryUrl || imageBlobUrl || window.location.href;
+        await navigator.clipboard.writeText(imageUrl);
         alert('คัดลอกลิงก์ไปยังคลิปบอร์ดแล้ว');
       } catch (clipboardError) {
         console.error('❌ Error copying to clipboard:', clipboardError);
